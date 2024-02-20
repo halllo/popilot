@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34202.233
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "popilot.cli", "popilot.cli\popilot.cli.csproj", "{39038C63-DA90-4D12-BF88-38966194F4B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "popilot", "popilot\popilot.csproj", "{D3B963C7-0FE5-4B13-B846-82F18BD6383F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{39038C63-DA90-4D12-BF88-38966194F4B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39038C63-DA90-4D12-BF88-38966194F4B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39038C63-DA90-4D12-BF88-38966194F4B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39038C63-DA90-4D12-BF88-38966194F4B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3B963C7-0FE5-4B13-B846-82F18BD6383F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3B963C7-0FE5-4B13-B846-82F18BD6383F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3B963C7-0FE5-4B13-B846-82F18BD6383F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3B963C7-0FE5-4B13-B846-82F18BD6383F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5C55BAB3-B988-4F77-BA24-BD1EBD4AAD74}
+	EndGlobalSection
+EndGlobal
