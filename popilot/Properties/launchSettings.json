@@ -1,0 +1,8 @@
+{
+  "profiles": {
+		"popilot": {
+			"commandName": "Project",
+			"commandLineArgs": "get-releasenotes 1337 -d"
+		}
+  }
+}
