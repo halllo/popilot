@@ -7,7 +7,7 @@ using System.Text;
 using static ColoredConsole;
 using static popilot.AzureDevOps;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-prio")]
 	class GetPrioritiesReport

@@ -5,7 +5,7 @@ using QuickGraph.Algorithms;
 using Spectre.Console;
 using static ColoredConsole;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-queries")]
 	class GetQueries

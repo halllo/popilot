@@ -6,9 +6,9 @@ Set up a connection to Azure DevOps by providing tenant Id, client Id, and OpenA
 
 Afterwards you can run the following commands:
 ```bash
-popilot get-prio -p "MyProject" -t "MyTeam" -d
-popilot get-current-sprint -p "MyProject" -t "MyTeam"
-popilot get-pipelines -p "MyProject" --path "\folder"
-popilot get-pipeline 50
-popilot get-releasenotes 1337 -d
+popilot.cli.exe get-prio -p "MyProject" -t "MyTeam" -d
+popilot.cli.exe get-current-sprint -p "MyProject" -t "MyTeam"
+popilot.cli.exe get-pipelines -p "MyProject" --path "\folder"
+popilot.cli.exe get-pipeline 50
+popilot.cli.exe get-releasenotes 1337 -d
 ```

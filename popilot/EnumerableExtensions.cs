@@ -11,6 +11,11 @@ namespace popilot
 			yield return t;
 		}
 
+		public static IEnumerable<T> NeverNull<T>(this IEnumerable<T>? ts)
+		{
+			return ts != null ? ts : Enumerable.Empty<T>();
+		}
+
 		public static IEnumerable<T> WhereIf<T>(this IEnumerable<T> source, bool condition, Func<T, bool> predicate)
 		{
 			if (condition)

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using NodaTime;
 using static ColoredConsole;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-velocity")]
 	class GetVelocity

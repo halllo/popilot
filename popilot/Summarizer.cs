@@ -1,10 +1,10 @@
 ﻿using Azure.AI.OpenAI;
-using Spectre.Console;
-using static ColoredConsole;
+using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace popilot
 {
-    public static class Summarizer
+	public static class Summarizer
     {
         public static string ESCALATION = $@"
 Du bist ein guter Product Owner. Fasse die Probleme zusammen. Dazu erhältst du einen Snapshot der Themen als JSON, der die Work Items enthält. Zusammenhängende Work Items haben das selbe Topic. Verwende die Titel der Work Items auf keinen Fall wortwörtlich, sondern achte darauf, dass die Zusammenfassung leicht und schnell lesbar ist. Erwähne alle Topics in kurzen Sätzen. Verwende keine Sätze mit Doppelpunkten.
@@ -26,7 +26,14 @@ Fasse dich kurz. Abkürzungen und Akronyme sollen nicht ausgeschrieben werden. B
             return openai.Summarize(json, prompt, consoleWrite);
         }
 
-        public static async Task<string> Summarize(this OpenAiService openai, string content, string prompt, bool consoleWrite = true)
+		private static string Json(object? o, bool indented = true) => o == null ? "<null>" : JsonSerializer.Serialize(o, o.GetType(), new JsonSerializerOptions
+		{
+			WriteIndented = indented,
+			Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+			NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+		});
+
+		public static async Task<string> Summarize(this OpenAiService openai, string content, string prompt, bool consoleWrite = true)
 		{
 			if (openai.Client == null) throw new NotSupportedException("Summaries without OpenAI config are not supported. Please add an OpenAiApiKey or use the --no-ai option!");
             

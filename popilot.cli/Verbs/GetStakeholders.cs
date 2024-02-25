@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-stakeholders")]
 	class GetStakeholders

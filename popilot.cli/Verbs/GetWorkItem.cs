@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using static ColoredConsole;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-workitem")]
 	class GetWorkItem

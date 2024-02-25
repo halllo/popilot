@@ -559,12 +559,6 @@ namespace popilot
 
 	file static class CollectionHelper
 	{
-		public static IEnumerable<T> NeverNull<T>(this IEnumerable<T> sequence)
-		{
-			if (sequence == null) return Enumerable.Empty<T>();
-			else return sequence;
-		}
-
 		public static async Task<List<TResult>> Paged<T, TResult>(this IEnumerable<T>? all, int pageSize, Func<IEnumerable<T>, Task<List<TResult>>> action)
 		{
 			List<TResult> results = new();

@@ -5,7 +5,7 @@ using Microsoft.TeamFoundation.Core.WebApi.Types;
 using Spectre.Console;
 using static ColoredConsole;
 
-namespace popilot.Verbs
+namespace popilot.cli.Verbs
 {
 	[Verb("get-pipelines")]
 	class GetPipelines
