@@ -61,21 +61,28 @@ namespace popilot
 			{
 				root.Tree(childrenSelector, graph);
 			}
-			
+
 			return graph;
 		}
 
-		public static IEnumerable<T> DfsVertices<T>(this IBidirectionalGraph<T, IEdge<T>> graph)
+		public static IEnumerable<T> Dfs<T>(this IVertexListGraph<T, IEdge<T>> graph, T? root = default, Func<IEnumerable<IEdge<T>>, IEnumerable<IEdge<T>>>? edges = null) where T : notnull
 		{
 			var dfs = new DepthFirstSearchAlgorithm<T, IEdge<T>>(
 				host: null,
 				visitedGraph: graph,
 				colors: new Dictionary<T, GraphColor>(),
-				outEdgeEnumerator: outEdges => outEdges);
+				outEdgeEnumerator: edges != null ? edges.Invoke : outEdges => outEdges);
 			var vertexRecorder = new VertexRecorderObserver<T, IEdge<T>>();
 			using (vertexRecorder.Attach(dfs))
 			{
-				dfs.Compute();
+				if (root != null)
+				{
+					dfs.Compute(root);
+				}
+				else
+				{
+					dfs.Compute();
+				}
 			}
 
 			return vertexRecorder.Vertices;
