@@ -14,6 +14,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
+    - run: |
+        git fetch --unshallow
     
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@v0
