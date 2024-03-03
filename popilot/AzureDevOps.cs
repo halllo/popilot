@@ -11,6 +11,7 @@ using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
 using Microsoft.VisualStudio.Services.Client;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
+using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
 using QuickGraph;
 using QuickGraph.Algorithms;
 using QuickGraph.Algorithms.Observers;
@@ -113,6 +114,141 @@ namespace popilot
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+		public async Task<IReadOnlyCollection<(Guid id, string name)>> GetProjects()
+		{
+			await this.Init();
+
+			var projects = Enumerable.Empty<TeamProjectReference>();
+
+			string? continuationToken = null;
+			do
+			{
+				var projectsResponse = await projectClient!.GetProjects(continuationToken: continuationToken);
+				projects = projects.Concat(projectsResponse);
+				continuationToken = projectsResponse.ContinuationToken;
+			} while (continuationToken != null);
+
+			return projects.Select(p => (p.Id, p.Name)).ToList();
+		}
+
+
+		public async Task<Build[]> GetBuilds(Guid projectId, string buildDefinitionName, string tagFilter = default, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+
+			var buildDefinitions = await buildClient!.GetDefinitionsAsync(projectId, queryOrder: DefinitionQueryOrder.DefinitionNameAscending, cancellationToken: cancellationToken);
+			var buildDefinition = buildDefinitions.Where(d => d.Name == buildDefinitionName).Single();
+			var builds = await buildClient.GetBuildsAsync(projectId, new[] { buildDefinition.Id }, cancellationToken: cancellationToken);
+			var filteredBuilds = builds.Where(b => b.Status == BuildStatus.Completed && b.Result == BuildResult.Succeeded && (tagFilter == null || b.Tags.Contains(tagFilter)));
+			return filteredBuilds.ToArray();
+		}
+
+
+		public async Task<BuildArtifact[]> GetBuildArtifacts(Guid projectId, int buildId, string? artifactFilter = default, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+
+			var artifacts = await buildClient!.GetArtifactsAsync(projectId, buildId, cancellationToken: cancellationToken);
+			var filteredArtifacts = artifacts.Where(a => artifactFilter == null || a.Name == artifactFilter);
+			return filteredArtifacts.ToArray();
+		}
+
+
+		public async Task<Stream> GetBuildArtifact(Guid projectId, int buildId, int artifactId, CancellationToken cancellationToken)
+		{
+			await this.Init();
+
+			var artifacts = await buildClient!.GetArtifactsAsync(projectId, buildId, cancellationToken: cancellationToken);
+			var artifact = artifacts.Where(a => a.Id == artifactId).Single();
+			try
+			{
+				var stream = await buildClient.GetArtifactContentZipAsync(projectId, buildId, artifact.Name, cancellationToken: cancellationToken);
+				return stream;
+			}
+			catch (VssServiceResponseException e) when (e.Message == "Found") //https://developercommunity.visualstudio.com/t/exception-is-being-thrown-for-getartifactcontentzi/1270336
+			{
+				var handler = new OptionedHttpMessageHandler(this.connection!.InnerHandler, disposeHandler: false, o => o.Set(new HttpRequestOptionsKey<HttpCompletionOption>("MS.VS.HttpCompletionOption"), HttpCompletionOption.ResponseHeadersRead));
+				using (var client = new HttpClient(handler))
+				{
+					client.Timeout = TimeSpan.FromMinutes(60);
+					var response = await client.GetAsync(artifact.Resource.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+					response.EnsureSuccessStatusCode();
+					var stream = await response.Content.ReadAsStreamAsync();
+					return stream;
+				}
+			}
+		}
+		private class OptionedHttpMessageHandler : HttpMessageHandler
+		{
+			private readonly HttpMessageInvoker innerInvoker;
+			private readonly Action<HttpRequestOptions> option;
+
+			public OptionedHttpMessageHandler(HttpMessageHandler innerHandler, bool disposeHandler, Action<HttpRequestOptions> option)
+			{
+				this.innerInvoker = new HttpMessageInvoker(innerHandler, disposeHandler);
+				this.option = option;
+			}
+			protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+			{
+				this.option(request.Options);
+				var response = await innerInvoker.SendAsync(request, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+				return response;
+			}
+
+			protected override void Dispose(bool disposing)
+			{
+				this.innerInvoker.Dispose();
+			}
+		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		public async Task<List<int>> GetBacklogOrder(string project, string team, string categoryReferenceName = "Microsoft.FeatureCategory", CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var b = await this.backlogClient!.GetBacklogLevelWorkItemsAsync(new TeamContext(project, team), categoryReferenceName);
+			var workItemsIds = b.WorkItems.Select(wi => wi.Target.Id).ToList();
+
+			return workItemsIds;
+		}
 
 		public async Task<IVertexListGraph<IWorkItemDto, IEdge<IWorkItemDto>>> GetWorkItemWithChildren(int workItemId, CancellationToken cancellationToken = default)
 		{
@@ -360,16 +496,9 @@ namespace popilot
 			return currentIteration;
 		}
 
-		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItemsOfIteration(TeamSettingsIteration iteration, CancellationToken cancellationToken = default)
+		public Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(TeamSettingsIteration iteration, CancellationToken cancellationToken = default)
 		{
-			await this.Init();
-			var sprintItems = await workItemClient!.QueryByWiqlAsync(new Wiql
-			{
-				Query = $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iteration.Path}'"
-			}, cancellationToken: cancellationToken);
-
-			var workItems = await GetWorkItemsWithParents(sprintItems.WorkItems, cancellationToken);
-			return workItems;
+			return GetWorkItems(wiql: $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iteration.Path}'", cancellationToken);
 		}
 
 		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<int> ids, CancellationToken cancellationToken = default)
@@ -378,6 +507,15 @@ namespace popilot
 			var workItems = await this.GetWorkItemsWithParents(ids, cancellationToken);
 			return workItems;
 		}
+
+		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(string wiql, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var queryResults = await workItemClient!.QueryByWiqlAsync(new Wiql { Query = wiql }, cancellationToken: cancellationToken);
+			var workItems = await GetWorkItemsWithParents(queryResults.WorkItems, cancellationToken);
+			return workItems;
+		}
+
 
 		public async Task<IReadOnlyCollection<WorkItem>> GetWorkItemsRaw(IEnumerable<int> ids, CancellationToken cancellationToken = default)
 		{
@@ -450,7 +588,16 @@ namespace popilot
 			return queries;
 		}
 
-		public async Task<(QueryHierarchyItem, IBidirectionalGraph<IWorkItemDto, IEdge<IWorkItemDto>>?)> GetQueryResults(Guid queryId, string? project = null, string? team = null)
+		public async Task<IReadOnlyCollection<IWorkItemDto>> GetQueryResultsFlat(Guid queryId, string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
+			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
+			await this.Init();
+			var query = await workItemClient!.GetQueryAsync(teamContext.Project, queryId.ToString(), QueryExpand.Wiql);
+
+			return await GetWorkItems(wiql: query.Wiql, cancellationToken: cancellationToken);
+		}
+
+		public async Task<(QueryHierarchyItem, IBidirectionalGraph<IWorkItemDto, IEdge<IWorkItemDto>>?)> GetQueryResults(Guid queryId, string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
 			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
 			await this.Init();
@@ -466,7 +613,7 @@ namespace popilot
 						_ => new Edge<IWorkItemDto>(workItems[e.Source.Id], workItems[e.Target.Id])
 					})
 					.ToBidirectionalGraph<IWorkItemDto, IEdge<IWorkItemDto>>();
-				
+
 				tree.AddVertexRange(results.WorkItemRelations
 					.Where(e => e.Rel == null)
 					.Select(e => workItems[e.Target.Id]));
@@ -482,9 +629,9 @@ namespace popilot
 		public async Task<(IWorkItemDto? Root, IReadOnlyList<IWorkItemDto>? BacklogWorkItems)> GetBacklogWorkItems(QueryHierarchyItem query)
 		{
 			var (_, tree) = await GetQueryResults(query.Id);
-			var backlogWorkItems = tree?.Dfs().Where(v => 
-				(v.Type == "Feature" && !v.ChildrenIds.Any()) 
-				|| 
+			var backlogWorkItems = tree?.Dfs().Where(v =>
+				(v.Type == "Feature" && !v.ChildrenIds.Any())
+				||
 				new[] { "User Story", "Bug", "Task" }.Contains(v.Type)
 			).ToList();
 			return (tree.Roots().FirstOrDefault(), backlogWorkItems);
@@ -538,6 +685,56 @@ namespace popilot
 			public int? CountClosed => this.WorkItems?.Where(wi => wi.State == "Closed").Count();
 			public int? Count => this.WorkItems?.Where(wi => wi.State != "Removed").Count();
 		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		public async Task<WorkItem> AddTag(int workItemId, string tag, CancellationToken cancellationToken)
+		{
+			await this.Init();
+
+			var workItem = await this.workItemClient!.GetWorkItemAsync(workItemId, cancellationToken: cancellationToken);
+			var tags = workItem.Fields.GetValueOrDefault("System.Tags", string.Empty).ToString();
+
+			var patchDocument = new JsonPatchDocument
+			{
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/System.Tags",
+					Value = string.IsNullOrWhiteSpace(tags) ? tag : $"{tags};{tag}",
+				}
+			};
+			var response = await this.workItemClient.UpdateWorkItemAsync(patchDocument, workItemId, cancellationToken: cancellationToken);
+			return response;
+		}
+
+		public async Task<Comment> AddComment(string project, int workItemId, string text, CancellationToken cancellationToken)
+		{
+			await this.Init();
+			var comment = await this.workItemClient!.AddCommentAsync(new CommentCreate { Text = text }, project, workItemId, cancellationToken: cancellationToken);
+			return comment;
+		}
 	}
 
 
@@ -558,6 +755,10 @@ namespace popilot
 		public static string UrlHumanReadable(this BuildDefinitionReference pipeline)
 		{
 			return string.Concat(pipeline.Url.Take(pipeline.Url.LastIndexOf("?revision="))).Replace("/_apis/build/Definitions/", "/_build?definitionId=");
+		}
+		public static string? GetTagValue(this Build build, string tagPrefix)
+		{
+			return build.Tags.FirstOrDefault(t => t.StartsWith(tagPrefix + "="))?.Substring((tagPrefix + "=").Length);
 		}
 	}
 

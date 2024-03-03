@@ -39,7 +39,7 @@ namespace popilot.cli.Verbs
 			var currentSprint = await azureDevOps.GetCurrentIteration(Project, Team);
 			logger.LogInformation("Sprint {Name} from {Start:dd.MM.yyyy} to {Finish:dd.MM.yyyy}", currentSprint.Name, currentSprint.Attributes.StartDate, currentSprint.Attributes.FinishDate);
 
-			var workItems = (await azureDevOps.GetWorkItemsOfIteration(currentSprint))
+			var workItems = (await azureDevOps.GetWorkItems(currentSprint))
 				.OrderBy(i => i.StackRank)
 				.Where(i => new[] { "Bug", "User Story" }.Contains(i.Type))
 				.ToList();
