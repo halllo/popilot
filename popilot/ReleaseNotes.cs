@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 
 namespace popilot
 {
@@ -77,7 +78,20 @@ namespace popilot
 		{
 			public string Html(bool retainFirstH1)
 			{
-				throw new NotImplementedException();
+				var stringBuilder = new StringBuilder();
+				stringBuilder.AppendLine("""<div style="font-family: sans-serif;">""");
+				foreach (var iteration in IterationsWithWorkItems.Reverse())
+				{
+					stringBuilder.AppendLine($"""<h1>{iteration.Iteration.Attributes.FinishDate:dd.MM.yyyy} <span style="color: gray; font-size: small;">{iteration.Iteration.Path}</span></h1>""");
+					foreach (var workItem in iteration.WorkItems)
+					{
+						stringBuilder.AppendLine($"""<span style="color: gray;">#{workItem.Id}</span> {workItem.ReleaseNotes}""");
+						stringBuilder.AppendLine("<br>\n\n");
+					}
+				}
+				stringBuilder.AppendLine("""</div>""");
+				var releaseNotes = stringBuilder.ToString();
+				return releaseNotes;
 			}
 		}
 	}

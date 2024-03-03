@@ -25,12 +25,11 @@ namespace popilot.cli.Verbs
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetReleaseNotes> logger)
 		{
 			var releaseNotesReader = new ReleaseNotes(azureDevOps);
-			string html;
 
 			if (Id.HasValue)
 			{
 				var releaseNotes = await releaseNotesReader.OfWorkItem(Id.Value);
-				html = releaseNotes.Html(retainFirstH1: !HideFirstH1);
+				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1);
 
 				if (GenerateDocument)
 				{
@@ -46,7 +45,19 @@ namespace popilot.cli.Verbs
 			else
 			{
 				var releaseNotes = await releaseNotesReader.OfLastSprints(Project, Team);
-				releaseNotes.ConsoleOut();
+
+				if (GenerateDocument)
+				{
+					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1);
+
+					var fileName = $"releasenotes_lastsprints_{DateTime.Now:yyyyMMdd-HHmmss}.html";
+					File.WriteAllText(fileName, html);
+					Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+				}
+				else
+				{
+					releaseNotes.ConsoleOut();
+				}
 			}
 		}
 	}
