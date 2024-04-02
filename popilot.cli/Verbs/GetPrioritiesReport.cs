@@ -26,12 +26,12 @@ namespace popilot.cli.Verbs
 		[Option(longName: "no-ai", Required = false, HelpText = "Does not generate summaries.")]
 		public bool NoAi { get; set; }
 
-		public async Task Do(AzureDevOps azureDevOps, IConfiguration config, OpenAiService openai, AzureOpenAiService azureOpenai, ILogger<GetPrioritiesReport> logger)
+		public async Task Do(AzureDevOps azureDevOps, IConfiguration config, IAi ai, ILogger<GetPrioritiesReport> logger)
 		{
 			if (GenerateDocument)
 			{
 				var (renderer, html) = Renderer.Html();
-				await Generate(azureDevOps, config, openai, render: renderer);
+				await Generate(azureDevOps, config, ai, render: renderer);
 
 				string fileName = $"priorities_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 				File.WriteAllText(fileName, html.ToString());
@@ -39,11 +39,11 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				await Generate(azureDevOps, config, openai, render: Renderer.Console());
+				await Generate(azureDevOps, config, ai, render: Renderer.Console());
 			}
 		}
 
-		private async Task Generate(AzureDevOps azureDevOps, IConfiguration config, OpenAiService openai, Renderer render)
+		private async Task Generate(AzureDevOps azureDevOps, IConfiguration config, IAi ai, Renderer render)
 		{
 			var priorityOrder = (config.GetSection("PriorityOrder").Get<string[]>()?.Reverse() ?? Array.Empty<string>()).ToList();
 			var priorities = await azureDevOps.GetPriorities(Project, Team, priorityOrder);
@@ -55,7 +55,7 @@ namespace popilot.cli.Verbs
 
 					if (priority.IsEscalation)
 					{
-						var summary = NoAi ? string.Empty : await openai.Summarize(priority.WorkItems, Summarizer.ESCALATION + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
+						var summary = NoAi ? string.Empty : await ai.Summarize(priority.WorkItems, Summarizer.ESCALATION + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
 						render.PrioSummary(summary);
 					}
 
@@ -65,7 +65,7 @@ namespace popilot.cli.Verbs
 						var currentSprintWorkItems = priority.WorkItems.Where(w => w.IterationPath == currentSprint.Path).ToList();
 						if (currentSprintWorkItems.Any())
 						{
-							var summary = NoAi ? string.Empty : await openai.Summarize(currentSprintWorkItems, Summarizer.SPRINT + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
+							var summary = NoAi ? string.Empty : await ai.Summarize(currentSprintWorkItems, Summarizer.SPRINT + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
 							render.PrioSummary(summary);
 							render.PrioWorkItems(currentSprintWorkItems);
 						}

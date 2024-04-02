@@ -86,13 +86,16 @@ static IHostBuilder CreateHostBuilder()
 			services.AddScoped<AzureDevOps>();
 
 			services.AddSingleton(sp => new OpenAiService(
-				string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
+				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
 					config["OpenAiApiKey"]!, 
-					new OpenAIClientOptions())));
+					new OpenAIClientOptions()),
+				ModelName: config["OpenAiModelName"]!));
 			services.AddSingleton(sp => new AzureOpenAiService(
-				string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new OpenAIClient(
+				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new OpenAIClient(
 					new Uri(config["AzureOpenAiEndpoint"]!), 
-					new AzureKeyCredential(config["AzureOpenAiKey"]!), new OpenAIClientOptions())));
+					new AzureKeyCredential(config["AzureOpenAiKey"]!), new OpenAIClientOptions()),
+				DeploymentName: config["AzureOpenAiDeploymentName"]!));
+			services.AddSingleton<IAi>(sp => sp.GetRequiredService<AzureOpenAiService>());
 
 			services.AddSingleton<GraphClientAuthProvider>();
 			services.AddSingleton(sp =>

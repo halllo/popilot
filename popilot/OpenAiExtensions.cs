@@ -25,6 +25,19 @@ namespace popilot
 		}
 	}
 
-	public record OpenAiService(OpenAIClient? Client);
-	public record AzureOpenAiService(OpenAIClient? Client);
+	public interface IAi
+	{
+		OpenAIClient? Client { get; }
+		string DeploymentOrModelName { get; }
+	}
+
+	public record OpenAiService(OpenAIClient? Client, string ModelName) : IAi
+	{
+		public string DeploymentOrModelName => ModelName;
+	}
+
+	public record AzureOpenAiService(OpenAIClient? Client, string DeploymentName) : IAi
+	{
+		public string DeploymentOrModelName => DeploymentName;
+	}
 }
