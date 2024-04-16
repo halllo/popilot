@@ -62,7 +62,9 @@ namespace popilot.cli.Verbs
 					//Relase or Escalaction or any other priority
 					var currentSprint = await azureDevOps.GetCurrentIteration(Project, Team);
 					{
-						var currentSprintWorkItems = priority.WorkItems.Where(w => w.IterationPath == currentSprint.Path).ToList();
+						var currentSprintWorkItems = priority.WorkItems
+							.Where(w => w.IterationPath == currentSprint.Path)
+							.ToList();
 						if (currentSprintWorkItems.Any())
 						{
 							var summary = NoAi ? string.Empty : await ai.Summarize(currentSprintWorkItems, Summarizer.SPRINT + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));

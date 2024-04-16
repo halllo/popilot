@@ -629,11 +629,15 @@ namespace popilot
 		public async Task<(IWorkItemDto? Root, IReadOnlyList<IWorkItemDto>? BacklogWorkItems)> GetBacklogWorkItems(QueryHierarchyItem query)
 		{
 			var (_, tree) = await GetQueryResults(query.Id);
-			var backlogWorkItems = tree?.Dfs().Where(v =>
-				(v.Type == "Feature" && !v.ChildrenIds.Any())
-				||
-				new[] { "User Story", "Bug", "Task" }.Contains(v.Type)
-			).ToList();
+			var backlogWorkItems = tree?
+				.Dfs()
+				.Where(v =>
+					(v.Type == "Feature" && !v.ChildrenIds.Any())
+					||
+					new[] { "User Story", "Bug", "Task" }.Contains(v.Type)
+				)
+				.Where(w => w.State != "Removed")
+				.ToList();
 			return (tree.Roots().FirstOrDefault(), backlogWorkItems);
 		}
 
