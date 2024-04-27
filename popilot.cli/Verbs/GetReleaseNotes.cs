@@ -19,6 +19,9 @@ namespace popilot.cli.Verbs
 		[Option(longName: "hide-first-h1", Required = false, HelpText = "hide first H1")]
 		public bool HideFirstH1 { get; set; }
 
+		[Option(longName: "hide-tags", Required = false, HelpText = "hide tags")]
+		public bool HideTags { get; set; }
+
 		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
 		public bool GenerateDocument { get; set; }
 
@@ -29,7 +32,7 @@ namespace popilot.cli.Verbs
 			if (Id.HasValue)
 			{
 				var releaseNotes = await releaseNotesReader.OfWorkItem(Id.Value);
-				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1);
+				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags);
 
 				if (GenerateDocument)
 				{
@@ -48,7 +51,7 @@ namespace popilot.cli.Verbs
 
 				if (GenerateDocument)
 				{
-					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1);
+					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags);
 
 					var fileName = $"releasenotes_lastsprints_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);
@@ -73,7 +76,7 @@ namespace popilot.cli.Verbs
 				foreach (var workItem in iteration.WorkItems)
 				{
 					var panel = new Panel(workItem.ReleaseNotes);
-					panel.Header = new PanelHeader($"#{workItem.Id}") { Justification = Justify.Left };
+					panel.Header = new PanelHeader($"#{workItem.Id} {string.Join(", ", workItem.Tags.Except(["ReleaseNotes"]))}") { Justification = Justify.Left };
 					panel.Expand = true;
 					panel.Border = BoxBorder.Rounded;
 					panel.BorderStyle = new Style(foreground: Color.Grey);

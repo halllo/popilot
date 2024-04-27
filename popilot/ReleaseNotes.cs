@@ -18,7 +18,7 @@ namespace popilot
 			var root = release.Vertices.Single(v => v.Id == workItemId);
 			var releaseNotess = release
 				.Dfs(root, edges: outEdges => outEdges.OrderBy(e => e.Target.StackRank).ThenBy(e => e.Target.Title/*or ID?*/))
-				.Where(wi => wi.Tags.Contains("_ReleaseNotes"))
+				.Where(wi => wi.Tags.Contains("_ReleaseNotes") || wi.Tags.Contains("ReleaseNotes"))
 				.ToList();
 
 			return new HierarchicalReleaseNotesWorkItems(root, releaseNotess);
@@ -30,7 +30,7 @@ namespace popilot
 			return new FlatReleaseNotesWorkItems(iterations
 				.Select(i => new AzureDevOps.IterationWithWorkItems(
 					i.Iteration,
-					i.WorkItems.Where(w => w.Tags.Contains("_ReleaseNotes")).ToList()
+					i.WorkItems.Where(w => w.Tags.Contains("_ReleaseNotes") || w.Tags.Contains("ReleaseNotes")).ToList()
 				))
 				.Where(i => i.WorkItems.Any())
 				.ToList()
@@ -39,53 +39,67 @@ namespace popilot
 
 		public interface IReleaseNotesWorkItems
 		{
-			string Html(bool retainFirstH1);
+			string Html(bool retainFirstH1, bool showTags);
 		}
 
 		public record HierarchicalReleaseNotesWorkItems(AzureDevOps.IWorkItemDto Root, IReadOnlyList<AzureDevOps.IWorkItemDto> WorkItems) : IReleaseNotesWorkItems
 		{
 			static readonly Regex matchFirstH1 = new("(?<!(^.*?<h1.*?))<h1.*?<\\/h1>", RegexOptions.Compiled);
 
-			public string Html(bool retainFirstH1)
+			public string Html(bool retainFirstH1, bool showTags)
 			{
-				var intro = string.Join("\n\n", WorkItems.Intersect(new[] { Root }).Select(wi => wi.ReleaseNotes))
+				var intro = string.Join("\n\n", WorkItems.Intersect([Root]).Select(wi => wi.ReleaseNotes))
 					.Return()
 					.Select(i => retainFirstH1 ? i : matchFirstH1.Replace(i, string.Empty))
 					.Single();
 
-				var releaseNotes = string.Join("<br>\n\n", WorkItems.Except(new[] { Root }).Select(wi => $"""<span style="color: gray;">#{wi.Id}</span> {wi.ReleaseNotes}"""));
+				var releaseNotes = string.Join("<br>\n\n", WorkItems.Except([Root]).Select(wi => 
+					$"""
+						<div class="workitem">
+							<span style="color: gray;" class="id">#{wi.Id}</span>
+							{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", wi.Tags.Except(["ReleaseNotes"]).Where(r => !r.StartsWith("_")))}</span>""" : string.Empty)}
+							{wi.ReleaseNotes}
+						</div>
+					"""));
 
 				var page = intro.Contains("{{children}}")
 					? $"""
-							<div style="font-family: sans-serif;">
-								{intro.Replace("{{children}}", releaseNotes)}
-							</div>
-							"""
+						<div style="font-family: sans-serif;">
+							{intro.Replace("{{children}}", releaseNotes)}
+						</div>
+						"""
 					: $"""
-							<div style="font-family: sans-serif;">
-								{intro}
-								<br>
-								<hr>
-								<br>
-								{(releaseNotes.Any() ? $"<h2><a id=\"releasenotes\">Release Notes</a></h2>\n{releaseNotes}" : "")}
-							</div>
-							""";
+						<div style="font-family: sans-serif;">
+							{intro}
+							<br>
+							<hr>
+							<br>
+							{(releaseNotes.Any() ? $"<h2><a id=\"releasenotes\">Release Notes</a></h2>\n{releaseNotes}" : "")}
+						</div>
+						""";
 				return page;
 			}
 		}
 
 		public record FlatReleaseNotesWorkItems(IReadOnlyList<AzureDevOps.IterationWithWorkItems> IterationsWithWorkItems) : IReleaseNotesWorkItems
 		{
-			public string Html(bool retainFirstH1)
+			public string Html(bool retainFirstH1, bool showTags)
 			{
 				var stringBuilder = new StringBuilder();
 				stringBuilder.AppendLine("""<div style="font-family: sans-serif;">""");
 				foreach (var iteration in IterationsWithWorkItems.Reverse())
 				{
-					stringBuilder.AppendLine($"""<h1>{iteration.Iteration.Attributes.FinishDate:dd.MM.yyyy} <span style="color: gray; font-size: small;">{iteration.Iteration.Path}</span></h1>""");
+					stringBuilder.AppendLine($"""<h1>{iteration.Iteration.Attributes.FinishDate:dd.MM.yyyy} <span style="color: gray; font-size: small;">{iteration.Iteration.Path.Replace("👍", "").Replace("👎", "")}</span></h1>""");
 					foreach (var workItem in iteration.WorkItems)
 					{
-						stringBuilder.AppendLine($"""<span style="color: gray;">#{workItem.Id}</span> {workItem.ReleaseNotes}""");
+						stringBuilder.AppendLine(
+							$""""
+								<div class="workitem">
+									<span style="color: gray;" class="id">#{workItem.Id}</span>
+									{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", workItem.Tags.Except(["ReleaseNotes"]).Where(r => !r.StartsWith("_")))}</span>""" : string.Empty)}
+									{workItem.ReleaseNotes}
+								</div>
+							"""");
 						stringBuilder.AppendLine("<br>\n\n");
 					}
 				}
