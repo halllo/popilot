@@ -84,15 +84,16 @@ namespace popilot.cli.Verbs
 						if (inIterationButNotSprint.Any())
 						{
 							var countClosedOrPlanned = priority.WorkItems.Where(w => w.State == "Closed" || w.IterationPath.StartsWith(multiSprintIteration)).Count();
-							render.PrioSummary($"Bis zum Ende der übergeordneten Iteration werden wir voraussichtlich auf {countClosedOrPlanned / (double)priority.Count!:0.0%} ({countClosedOrPlanned}/{priority.Count}) kommen.");
+							render.PrioSummary($"Until the end of this iteration we will probably get to {countClosedOrPlanned / (double)priority.Count!:0.0%} ({countClosedOrPlanned}/{priority.Count}).");
 						}
 					}
 				}
 			}
 
 			var iterations = await azureDevOps.GetPastIterationsWithCompletedWorkItems(Project, Team, take: 10);
-			var stats = iterations.GetStatistics();
-			render.Statistics(stats);
+			var sprintStats = iterations.GetSprintStatistics();
+			var iterationStats = await azureDevOps.GetIterationStatistics(Project, Team);
+			render.Statistics(sprintStats, iterationStats);
 			render.End();
 		}
 	}
@@ -111,7 +112,7 @@ namespace popilot.cli.Verbs
 		public delegate void _PrioSummary(string summary);
 		public delegate void _PrioWorkItems(IEnumerable<IWorkItemDto> workItems);
 		public delegate void _PrioSprintEmpty();
-		public delegate void _Statistics(Statistics.WorkItemStatistics statistics);
+		public delegate void _Statistics(Statistics.SprintStatistics sprints, Statistics.IterationStatistics iteration);
 		public delegate void _End();
 
 		public static (Renderer, StringBuilder) Html()
@@ -133,7 +134,7 @@ namespace popilot.cli.Verbs
 						<b>{name} {countClosed / (double)count:0.0%}</b>
 						<span style="color: gray;">
 						(<a href="{url}">{countClosed}/{count}</a>)
-						{(priority.IsRelease && priority.Root?.TargetDate != null ? $"geplant zum {priority.Root.TargetDate.Value.ToLocalTime():dd.MM.yyyy}." : "")}
+						{(priority.IsRelease && priority.Root?.TargetDate != null ? $"planned for {priority.Root.TargetDate.Value.ToLocalTime():dd.MM.yyyy}." : "")}
 						</span>
 						<br>
 					""");
@@ -180,16 +181,27 @@ namespace popilot.cli.Verbs
 				},
 				PrioSprintEmpty: () =>
 				{
-					html.AppendLine($"""In diesem Sprint arbeitet das Team an anderen Themen.<br><br>""");
+					html.AppendLine($"""In this sprint we worked on different topics.<br><br>""");
 				},
-				Statistics: (stats) =>
+				Statistics: (sprints, iteration) =>
 				{
 					html.AppendLine($"""
-						<b>Statistik</b>
+						<b>Statistics</b>
 						<br>
-						{stats.ItemsInLastSprint} abgeschlossene WorkItems im letzten Sprint (Durchschnitt ist {stats.ItemsPerSprint})
+						{sprints.ItemsInLastSprint} closed WorkItems in last sprint (average is {sprints.ItemsPerSprint})
 						<br>
-						{stats.StoryPointsInLastSprint} StoryPoints im letzten Sprint (Durchschnitt ist {stats.StoryPointsPerSprint})
+						{sprints.StoryPointsInLastSprint} StoryPoints in last sprint (average is {sprints.StoryPointsPerSprint})
+						<br>			
+						{sprints.LastSprintGoalReached switch
+						{
+							true => "👍 sprint goal was achieved",
+							false => "👎 sprint goal was not achieved",
+							_ => ""
+						}}
+						<br>
+						{iteration.FractionClosedWorkItems:0,0%} closed WorkItems of current iteration
+						<br>
+						{iteration.FractionCommittedWorkItems:0,0%} committed WorkItems of current iteration
 						"""
 					);
 				},
@@ -233,11 +245,11 @@ namespace popilot.cli.Verbs
 					AnsiConsole.WriteLine();
 					AnsiConsole.WriteLine();
 				},
-				Statistics: (stats) =>
+				Statistics: (sprints, iteration) =>
 				{
 					Boring("Statistik");
-					Info($"{stats.ItemsInLastSprint} abgeschlossene WorkItems im letzen Sprint (Durchschnitt ist {stats.ItemsPerSprint})");
-					Info($"{stats.StoryPointsInLastSprint} StoryPoints im letzten Sprint (Durchschnitt ist {stats.StoryPointsPerSprint})");
+					Info($"{sprints.ItemsInLastSprint} abgeschlossene WorkItems im letzen Sprint (Durchschnitt ist {sprints.ItemsPerSprint})");
+					Info($"{sprints.StoryPointsInLastSprint} StoryPoints im letzten Sprint (Durchschnitt ist {sprints.StoryPointsPerSprint})");
 				},
 				End: () =>
 				{

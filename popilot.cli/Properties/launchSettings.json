@@ -2,7 +2,7 @@
   "profiles": {
 		"popilot": {
 			"commandName": "Project",
-			"commandLineArgs": "get-releasenotes -d"
+			"commandLineArgs": "get-velocity"
 		}
   }
 }

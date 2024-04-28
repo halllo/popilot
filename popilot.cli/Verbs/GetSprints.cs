@@ -14,13 +14,13 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetSprints> logger)
 		{
-			var iterations = await azureDevOps.GetIterations(Project, Team);
-			foreach (var iteration in iterations)
+			var sprints = await azureDevOps.GetIterations(Project, Team);
+			foreach (var sprint in sprints)
 			{
-				Info(iteration.Name, sameLine: true);
-				Boring($" {iteration.Attributes.TimeFrame}; from {iteration.Attributes.StartDate:dd.MM.yyyy} to {iteration.Attributes.FinishDate:dd.MM.yyyy}");
+				Info(sprint.Name, sameLine: true);
+				Boring($" {sprint.Attributes.TimeFrame}; from {sprint.Attributes.StartDate:dd.MM.yyyy} to {sprint.Attributes.FinishDate:dd.MM.yyyy}");
 			}
-			logger.LogInformation("{Itertions} loaded", iterations.Count);
+			logger.LogInformation("{Sprints} loaded", sprints.Count);
 		}
 	}
 

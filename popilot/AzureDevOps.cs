@@ -356,6 +356,8 @@ namespace popilot
 				}
 
 				directWorkItem.ParentTitle = parent?.Title;
+				directWorkItem.ParentType = parent?.Type;
+				directWorkItem.ParentTags = parent?.Tags;
 				directWorkItem.RootParentTitle = (parentParentParent ?? parentParent ?? parent)?.Title;
 				directWorkItem.RootParentTargetDate = (parentParentParent ?? parentParent ?? parent ?? directWorkItem).TargetDate;
 				directWorkItem.RootParentState = (parentParentParent ?? parentParent ?? parent ?? directWorkItem).State;
@@ -444,6 +446,8 @@ namespace popilot
 			DateTime? TargetDate { get; }
 			int? ParentId { get; }
 			string? ParentTitle { get; }
+			string? ParentType { get; }
+			string[]? ParentTags { get; }
 			string? RootParentTitle { get; }
 			DateTime? RootParentTargetDate { get; }
 			string? RootParentState { get; }
@@ -473,6 +477,8 @@ namespace popilot
 			public DateTime? TargetDate { get; set; }
 			public int? ParentId { get; set; }
 			public string? ParentTitle { get; set; }
+			public string? ParentType { get; set; }
+			public string[]? ParentTags { get; set; }
 			public string? RootParentTitle { get; set; }
 			public DateTime? RootParentTargetDate { get; set; }
 			public string? RootParentState { get; set; }
@@ -491,14 +497,34 @@ namespace popilot
 		public async Task<TeamSettingsIteration> GetCurrentIteration(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
-			var iterations = await this.backlogClient!.GetTeamIterationsAsync(new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam), cancellationToken: cancellationToken);
+			var iterations = await GetIterations(project, team, cancellationToken);
 			var currentIteration = iterations.Where(i => i.Attributes.TimeFrame == TimeFrame.Current).Single();
 			return currentIteration;
 		}
 
 		public Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(TeamSettingsIteration iteration, CancellationToken cancellationToken = default)
 		{
-			return GetWorkItems(wiql: $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iteration.Path}'", cancellationToken);
+			return GetWorkItemsOfIterationPath(iteration.Path);
+		}
+
+		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<TeamSettingsIteration> iterations, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			return await iterations
+				.ToAsyncEnumerable()
+				.SelectAwait(async i => await GetWorkItems(i))
+				.SelectMany(i => i.ToAsyncEnumerable())
+				.Where(w =>
+						w.Type == "User Story"
+					|| (w.Type == "Bug" && w.ParentType == "Feature")
+					|| (w.Type == "Task" && w.ParentType == "Feature")
+				)
+				.ToListAsync();
+		}
+
+		public Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItemsOfIterationPath(string iterationPath, CancellationToken cancellationToken = default)
+		{
+			return GetWorkItems(wiql: $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iterationPath}'", cancellationToken);
 		}
 
 		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<int> ids, CancellationToken cancellationToken = default)
