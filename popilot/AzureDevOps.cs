@@ -593,7 +593,7 @@ namespace popilot
 				.Select(i => new IterationWithWorkItems(
 					Iteration: i.Iteration,
 					WorkItems: i.WorkItemReferences
-						.SelectMany(r => workItemsById[r.Id].Take(1/*only output each item once*/))
+						.SelectMany(r => workItemsById[r.Id].Where(rr => rr.IterationPath == i.Iteration.Path).Take(1/*only output each item once*/))
 						.OrderBy(i => i.StackRank)
 						.Where(i => new[] { "Bug", "User Story" }.Contains(i.Type))
 						.Where(i => i.State == "Closed")
