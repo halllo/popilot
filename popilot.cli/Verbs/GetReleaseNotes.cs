@@ -22,6 +22,9 @@ namespace popilot.cli.Verbs
 		[Option(longName: "hide-tags", Required = false, HelpText = "hide tags")]
 		public bool HideTags { get; set; }
 
+		[Option(longName: "allowed-tags", Required = false, HelpText = "allowed tags")]
+		public IEnumerable<string> AllowedTags { get; set; } = [];
+
 		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
 		public bool GenerateDocument { get; set; }
 
@@ -32,7 +35,7 @@ namespace popilot.cli.Verbs
 			if (Id.HasValue)
 			{
 				var releaseNotes = await releaseNotesReader.OfWorkItem(Id.Value);
-				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags);
+				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: [..AllowedTags]);
 
 				if (GenerateDocument)
 				{
@@ -51,7 +54,7 @@ namespace popilot.cli.Verbs
 
 				if (GenerateDocument)
 				{
-					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags);
+					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: [.. AllowedTags]);
 
 					var fileName = $"releasenotes_lastsprints_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);

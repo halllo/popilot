@@ -39,14 +39,14 @@ namespace popilot
 
 		public interface IReleaseNotesWorkItems
 		{
-			string Html(bool retainFirstH1, bool showTags);
+			string Html(bool retainFirstH1, bool showTags, string[]? allowedTags = null);
 		}
 
 		public record HierarchicalReleaseNotesWorkItems(AzureDevOps.IWorkItemDto Root, IReadOnlyList<AzureDevOps.IWorkItemDto> WorkItems) : IReleaseNotesWorkItems
 		{
 			static readonly Regex matchFirstH1 = new("(?<!(^.*?<h1.*?))<h1.*?<\\/h1>", RegexOptions.Compiled);
 
-			public string Html(bool retainFirstH1, bool showTags)
+			public string Html(bool retainFirstH1, bool showTags, string[]? allowedTags = null)
 			{
 				var intro = string.Join("\n\n", WorkItems.Intersect([Root]).Select(wi => wi.ReleaseNotes))
 					.Return()
@@ -57,7 +57,7 @@ namespace popilot
 					$"""
 						<div class="workitem">
 							<span style="color: gray;" class="id">#{wi.Id}</span>
-							{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", wi.Tags.Except(["ReleaseNotes"]).Where(r => !r.StartsWith("_")))}</span>""" : string.Empty)}
+							{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", wi.Tags.Except(["ReleaseNotes"]).Where(t => !t.StartsWith("_")).Where(t => allowedTags == null || allowedTags.Contains(t)))}</span>""" : string.Empty)}
 							{wi.ReleaseNotes}
 						</div>
 					"""));
@@ -83,7 +83,7 @@ namespace popilot
 
 		public record FlatReleaseNotesWorkItems(IReadOnlyList<AzureDevOps.IterationWithWorkItems> IterationsWithWorkItems) : IReleaseNotesWorkItems
 		{
-			public string Html(bool retainFirstH1, bool showTags)
+			public string Html(bool retainFirstH1, bool showTags, string[]? allowedTags = null)
 			{
 				var stringBuilder = new StringBuilder();
 				stringBuilder.AppendLine("""<div style="font-family: sans-serif;">""");
@@ -96,7 +96,7 @@ namespace popilot
 							$""""
 								<div class="workitem">
 									<span style="color: gray;" class="id">#{workItem.Id}</span>
-									{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", workItem.Tags.Except(["ReleaseNotes"]).Where(r => !r.StartsWith("_")))}</span>""" : string.Empty)}
+									{(showTags ? $"""<span style="color: gray; font-size: x-small;" class="tags">{string.Join(", ", workItem.Tags.Except(["ReleaseNotes"]).Where(r => !r.StartsWith("_")).Where(t => allowedTags == null || allowedTags.Contains(t)))}</span>""" : string.Empty)}
 									{workItem.ReleaseNotes}
 								</div>
 							"""");
