@@ -35,7 +35,7 @@ namespace popilot.cli.Verbs
 			if (Id.HasValue)
 			{
 				var releaseNotes = await releaseNotesReader.OfWorkItem(Id.Value);
-				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: [..AllowedTags]);
+				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: NullIfEmpty(AllowedTags));
 
 				if (GenerateDocument)
 				{
@@ -50,11 +50,11 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var releaseNotes = await releaseNotesReader.OfLastSprints(Project, Team);
+				var releaseNotes = await releaseNotesReader.OfCurrentOrLastSprints(Project, Team);
 
 				if (GenerateDocument)
 				{
-					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: [.. AllowedTags]);
+					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: NullIfEmpty(AllowedTags));
 
 					var fileName = $"releasenotes_lastsprints_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);
@@ -65,6 +65,12 @@ namespace popilot.cli.Verbs
 					releaseNotes.ConsoleOut();
 				}
 			}
+		}
+
+		static T[]? NullIfEmpty<T>(IEnumerable<T> ts)
+		{
+			var array = ts.ToArray();
+			return array.Length == 0 ? null : array;
 		}
 	}
 

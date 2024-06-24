@@ -24,9 +24,9 @@ namespace popilot
 			return new HierarchicalReleaseNotesWorkItems(root, releaseNotess);
 		}
 
-		public async Task<IReleaseNotesWorkItems> OfLastSprints(string? project, string? team, CancellationToken cancellationToken = default)
+		public async Task<IReleaseNotesWorkItems> OfCurrentOrLastSprints(string? project, string? team, CancellationToken cancellationToken = default)
 		{
-			var iterations = await azureDevOps.GetPastIterationsWithCompletedWorkItems(project, team, cancellationToken: cancellationToken);
+			var iterations = await azureDevOps.GetCurrentOrPastIterationsWithCompletedWorkItems(project, team, cancellationToken: cancellationToken);
 			return new FlatReleaseNotesWorkItems(iterations
 				.Select(i => new AzureDevOps.IterationWithWorkItems(
 					i.Iteration,

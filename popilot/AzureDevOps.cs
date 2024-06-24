@@ -571,13 +571,19 @@ namespace popilot
 		}
 		public record StateChange(string State, DateTime At, string By);
 
-		public async Task<IReadOnlyList<IterationWithWorkItems>> GetPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
+		public Task<IReadOnlyList<IterationWithWorkItems>> GetCurrentOrPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
+			=> GetIterationsWithCompletedWorkItems(project, team, i => i.Attributes.TimeFrame == TimeFrame.Current || i.Attributes.TimeFrame == TimeFrame.Past, take, cancellationToken);
+
+		public Task<IReadOnlyList<IterationWithWorkItems>> GetPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
+			=> GetIterationsWithCompletedWorkItems(project, team, i => i.Attributes.TimeFrame == TimeFrame.Past, take, cancellationToken);
+
+		private async Task<IReadOnlyList<IterationWithWorkItems>> GetIterationsWithCompletedWorkItems(string? project = null, string? team = null, Func<TeamSettingsIteration, bool>? iterationFilter = null, int? take = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
 			var iterations = await this.backlogClient!.GetTeamIterationsAsync(teamContext, cancellationToken: cancellationToken);
 			var iterationsWithWorkItemReferences = await iterations
-				.Where(iteration => iteration.Attributes.TimeFrame == TimeFrame.Past)
+				.Where(iteration => iterationFilter?.Invoke(iteration) ?? iteration.Attributes.TimeFrame == TimeFrame.Past)
 				.TakeLast(take ?? 10)
 				.ToAsyncEnumerable()
 				.SelectAwait(async iteration =>
