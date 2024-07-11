@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
+using OpenAI;
 using popilot;
 using Serilog;
 using System.Reflection;
@@ -87,13 +88,13 @@ static IHostBuilder CreateHostBuilder()
 
 			services.AddSingleton(sp => new OpenAiService(
 				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
-					config["OpenAiApiKey"]!, 
+					config["OpenAiApiKey"]!,
 					new OpenAIClientOptions()),
 				ModelName: config["OpenAiModelName"]!));
 			services.AddSingleton(sp => new AzureOpenAiService(
-				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new OpenAIClient(
-					new Uri(config["AzureOpenAiEndpoint"]!), 
-					new AzureKeyCredential(config["AzureOpenAiKey"]!), new OpenAIClientOptions()),
+				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new AzureOpenAIClient(
+					new Uri(config["AzureOpenAiEndpoint"]!),
+					new AzureKeyCredential(config["AzureOpenAiKey"]!), new AzureOpenAIClientOptions()),
 				DeploymentName: config["AzureOpenAiDeploymentName"]!));
 			services.AddSingleton<IAi>(sp => sp.GetRequiredService<AzureOpenAiService>());
 

@@ -1,24 +1,21 @@
-﻿using Azure.AI.OpenAI;
+﻿using OpenAI;
+using OpenAI.Chat;
+using System.ClientModel;
 using System.Text;
 
 namespace popilot
 {
 	public static class OpenAiExtensions
 	{
-		public static async Task<string> GetMessageContentAsString(this Azure.Response<StreamingChatCompletions> response, bool consoleWrite = true)
+		public static async Task<string> GetMessageContentAsString(this AsyncResultCollection<StreamingChatCompletionUpdate> response, bool consoleWrite = true)
 		{
 			var sb = new StringBuilder();
-			using (StreamingChatCompletions streamingChatCompletions = response.Value)
+			await foreach (StreamingChatCompletionUpdate update in response)
 			{
-				await foreach (StreamingChatChoice choice in streamingChatCompletions.GetChoicesStreaming())
+				foreach (ChatMessageContentPart updatePart in update.ContentUpdate)
 				{
-					await foreach (ChatMessage message in choice.GetMessageStreaming())
-					{
-						sb.Append(message.Content);
-						if (consoleWrite) Console.Write(message.Content);
-					}
-					sb.AppendLine();
-					if (consoleWrite) Console.WriteLine();
+					sb.Append(updatePart.Text);
+					if (consoleWrite) Console.Write(updatePart.Text);
 				}
 			}
 			return sb.ToString();

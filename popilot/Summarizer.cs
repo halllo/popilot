@@ -1,4 +1,4 @@
-﻿using Azure.AI.OpenAI;
+﻿using OpenAI.Chat;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -37,17 +37,17 @@ Fasse dich kurz. Erwähne Work Items im Status 'New' als geplant und behaupte au
 		{
 			if (ai.Client == null) throw new NotSupportedException("Summaries without OpenAI config are not supported. Please add an OpenAiApiKey or use the --no-ai option!");
 
-			var response = await ai.Client.GetChatCompletionsStreamingAsync(
-				deploymentOrModelName: ai.DeploymentOrModelName,
-				chatCompletionsOptions: new ChatCompletionsOptions()
+			var chatClient = ai.Client.GetChatClient(ai.DeploymentOrModelName);
+			var response = chatClient.CompleteChatStreamingAsync(
+				messages: [
+					ChatMessage.CreateSystemMessage(prompt),
+					ChatMessage.CreateUserMessage(content)
+				],
+				options: new ChatCompletionOptions
 				{
-					Temperature = 0.0f,
-					Messages =
-					{
-						new ChatMessage(ChatRole.System, prompt),
-						new ChatMessage(ChatRole.User, content),
-					}
+					Temperature = 0.0f
 				});
+
 			return await response.GetMessageContentAsString(consoleWrite);
 		}
 	}
