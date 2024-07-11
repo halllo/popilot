@@ -266,7 +266,6 @@ namespace popilot
 				var childrenChildrenIds = children.SelectMany(c => c.ChildrenIds).ToArray();
 				if (childrenChildrenIds.Any())
 				{
-
 					var childrenChildren = Map(await childrenChildrenIds.Paged(200, page => workItemClient.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken)));
 
 					var childrenChildrenChildrenIds = childrenChildren.SelectMany(c => c.ChildrenIds).ToArray();
@@ -303,12 +302,7 @@ namespace popilot
 		private Task<List<WorkItemDto>> GetWorkItemsWithParents(IEnumerable<WorkItemReference> workItemReferences, CancellationToken cancellationToken) => GetWorkItemsWithParents(workItemReferences.Select(r => r.Id), cancellationToken);
 		private async Task<List<WorkItemDto>> GetWorkItemsWithParents(IEnumerable<int> ids, CancellationToken cancellationToken)
 		{
-			List<WorkItem> workItems = new();
-			foreach (var page in ids.Chunk(200))
-			{
-				var workItemsPage = await workItemClient!.GetWorkItemsAsync(page.Select(i => i), expand: WorkItemExpand.Relations, cancellationToken: cancellationToken);
-				workItems.AddRange(workItemsPage);
-			}
+			List<WorkItem> workItems = await ids.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
 
 			List<WorkItemDto> mappedWorkItems = new();
 			var directWorkItems = Map(workItems);
@@ -316,21 +310,21 @@ namespace popilot
 			var parentIds = directWorkItems.Where(i => i.ParentId.HasValue).Select(i => i.ParentId!.Value).ToList();
 			if (parentIds.Any())
 			{
-				var parentWorkItems = await workItemClient!.GetWorkItemsAsync(parentIds, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken);
+				var parentWorkItems = await parentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
 				var parentDtos = Map(parentWorkItems);
 				mappedWorkItems.AddRange(parentDtos);
 
 				var parentParentIds = parentDtos.Where(i => i.ParentId.HasValue).Select(i => i.ParentId!.Value).ToList();
 				if (parentParentIds.Any())
 				{
-					var parentParentWorkItems = await workItemClient.GetWorkItemsAsync(parentParentIds, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken);
+					var parentParentWorkItems = await parentParentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
 					var parentParentDtos = Map(parentParentWorkItems);
 					mappedWorkItems.AddRange(parentParentDtos);
 
 					var parentParentParentIds = parentParentDtos.Where(i => i.ParentId.HasValue).Select(i => i.ParentId!.Value).ToList();
 					if (parentParentParentIds.Any())
 					{
-						var parentParentParentWorkItems = await workItemClient.GetWorkItemsAsync(parentParentParentIds, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken);
+						var parentParentParentWorkItems = await parentParentParentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
 						var parentParentParentDtos = Map(parentParentParentWorkItems);
 						mappedWorkItems.AddRange(parentParentParentDtos);
 					}
