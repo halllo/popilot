@@ -202,6 +202,8 @@ namespace popilot.cli.Verbs
 						{iteration.FractionClosedWorkItems:0,0%} closed WorkItems of current iteration
 						<br>
 						{iteration.FractionCommittedWorkItems:0,0%} committed WorkItems of current iteration
+						<br>
+						{iteration.FractionClosedCommittedWorkItems:0,0%} closed committed WorkItems of current iteration
 						"""
 					);
 				},

@@ -63,17 +63,23 @@ namespace popilot
 			var closedFeatures = currentIterationFeatures.Where(w => w.State == "Closed");
 			var fractionClosedFeatures = (double)closedFeatures.Count() / currentIterationFeatures.Count();
 			
-			var commitedWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("committed", StringComparer.InvariantCultureIgnoreCase) ?? false);
-			var fractionCommittedWorkItems = (double)commitedWorkItems.Count() / currentIterationWorkItems.Count();
-			var fractionCommittedFeatures = (double)currentIterationFeatures.Where(w => w.Tags.Contains("committed", StringComparer.InvariantCultureIgnoreCase)).Count() / currentIterationFeatures.Count();
-			
-			var previousIteration = iterations.Reverse().SkipWhile(i => i.Key != currentIteration.Key).Skip(1).Take(1).Single();
-			var previousIterationWorkItems = await azureDevOps.GetWorkItems(previousIteration);
+			var committedWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("committed", StringComparer.InvariantCultureIgnoreCase) ?? false);
+			var fractionCommittedWorkItems = (double)committedWorkItems.Count() / currentIterationWorkItems.Count();
+
+			var committedFeatures = currentIterationFeatures.Where(w => w.Tags.Contains("committed", StringComparer.InvariantCultureIgnoreCase));
+			var fractionCommittedFeatures = (double)committedFeatures.Count() / currentIterationFeatures.Count();
+
+			var closedCommittedWorkItems = committedWorkItems.Where(w => w.State == "Closed");
+			var fractionClosedCommittedWorkItems = (double)closedCommittedWorkItems.Count() / committedWorkItems.Count();
+			var fractionClosedCommittedFeatures = (double)committedFeatures.Where(w => w.State == "Closed").Count() / committedFeatures.Count();
+
+			var previousIteration = iterations.Reverse().SkipWhile(i => i.Key != currentIteration.Key).Skip(1).Take(1).SingleOrDefault();
+			var previousIterationWorkItems = previousIteration == null ? [] : await azureDevOps.GetWorkItems(previousIteration);
 			var spilloverWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("spillover", StringComparer.InvariantCultureIgnoreCase) ?? false);
 			var fractionSpilloverWorkItems = (double)spilloverWorkItems.Count() / (spilloverWorkItems.Count() + previousIterationWorkItems.Count());
 			
 			var spilloverFeatures = currentIterationFeatures.Where(w => w.Tags.Contains("spillover", StringComparer.InvariantCultureIgnoreCase));
-			var previousIterationFeatures = (await azureDevOps.GetWorkItemsOfIterationPath(previousIteration.Key)).Where(w => w.Type == "Feature");
+			var previousIterationFeatures = previousIteration == null ? [] : (await azureDevOps.GetWorkItemsOfIterationPath(previousIteration.Key)).Where(w => w.Type == "Feature");
 			var fractionSpilloverFeatures = (double)spilloverFeatures.Count() / (spilloverFeatures.Count() + previousIterationFeatures.Count());
 			
 			return new IterationStatistics(
@@ -84,9 +90,11 @@ namespace popilot
 				FractionClosedFeatures: fractionClosedFeatures,
 				FractionCommittedWorkItems: fractionCommittedWorkItems,
 				FractionCommittedFeatures: fractionCommittedFeatures,
+				FractionClosedCommittedWorkItems: fractionClosedCommittedWorkItems,
+				FractionClosedCommittedFeatures: fractionClosedCommittedFeatures,
 				FractionSpilloverWorkItems: fractionSpilloverWorkItems,
 				FractionSpilloverFeatures: fractionSpilloverFeatures,
-				PreviousIterationName: previousIteration.Key
+				PreviousIterationName: previousIteration?.Key ?? string.Empty
 			);
 		}
 
@@ -98,6 +106,8 @@ namespace popilot
 			double FractionClosedFeatures,
 			double FractionCommittedWorkItems,
 			double FractionCommittedFeatures,
+			double FractionClosedCommittedWorkItems,
+			double FractionClosedCommittedFeatures,
 			double FractionSpilloverWorkItems,
 			double FractionSpilloverFeatures,
 			string PreviousIterationName
