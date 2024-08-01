@@ -488,6 +488,44 @@ namespace popilot
 			return iterations;
 		}
 
+		public async Task<List<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var root = await this.workItemClient!.GetClassificationNodeAsync(
+				project ?? options.Value.DefaultProject, TreeStructureGroup.Iterations,
+				path: $"\\{(team ?? options.Value.DefaultTeam ?? "").Replace("Team", "").Trim()}",
+				depth: 2);
+
+			var sprints = EnumerableExtensions
+				.Tree([root], parent => parent.Children)
+				.Dfs(root)
+				.Where(s => s.HasChildren == false)
+				.Select(s => new TeamSettingsIteration
+				{
+					Attributes = new TeamIterationAttributes
+					{
+						TimeFrame = ((DateTime)s.Attributes["startDate"], (DateTime)s.Attributes["finishDate"]) switch
+						{
+							(DateTime start, DateTime end) when end < DateTime.Now => TimeFrame.Past,
+							(DateTime start, DateTime end) when start < DateTime.Now && DateTime.Now < end => TimeFrame.Current,
+							(DateTime start, DateTime end) when DateTime.Now < start => TimeFrame.Future,
+							_ => throw new ArgumentOutOfRangeException(nameof(TeamIterationAttributes.TimeFrame)),
+						},
+						StartDate = (DateTime)s.Attributes["startDate"],
+						FinishDate = (DateTime)s.Attributes["finishDate"],
+					},
+					Id = Guid.Empty,
+					Name = s.Name,
+					Links = s.Links,
+					Path = s.Path.Replace("\\Iteration\\", "\\").TrimStart('\\'),
+					Url = s.Url,
+				})
+				.OrderBy(s => s.Attributes.FinishDate)
+				.ToList();
+
+			return sprints;
+		}
+
 		public async Task<TeamSettingsIteration> GetCurrentIteration(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
@@ -565,25 +603,34 @@ namespace popilot
 		}
 		public record StateChange(string State, DateTime At, string By);
 
-		public Task<IReadOnlyList<IterationWithWorkItems>> GetCurrentOrPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
-			=> GetIterationsWithCompletedWorkItems(project, team, i => i.Attributes.TimeFrame == TimeFrame.Current || i.Attributes.TimeFrame == TimeFrame.Past, take, cancellationToken);
+		public async Task<IReadOnlyList<IterationWithWorkItems>> GetPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
+		{
+			var iterations = await GetIterations(project, team, cancellationToken);
+			var filteredIterations = iterations
+				.Where(i => i.Attributes.TimeFrame == TimeFrame.Past)
+				.TakeLast(take ?? 10);
 
-		public Task<IReadOnlyList<IterationWithWorkItems>> GetPastIterationsWithCompletedWorkItems(string? project = null, string? team = null, int? take = null, CancellationToken cancellationToken = default)
-			=> GetIterationsWithCompletedWorkItems(project, team, i => i.Attributes.TimeFrame == TimeFrame.Past, take, cancellationToken);
+			return await GetIterationsWithCompletedWorkItems(project, team, iterations, cancellationToken);
+		}
 
-		private async Task<IReadOnlyList<IterationWithWorkItems>> GetIterationsWithCompletedWorkItems(string? project = null, string? team = null, Func<TeamSettingsIteration, bool>? iterationFilter = null, int? take = null, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<IterationWithWorkItems>> GetIterationsWithCompletedWorkItems(string? project, string? team, IEnumerable<TeamSettingsIteration> iterations, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
-			var iterations = await this.backlogClient!.GetTeamIterationsAsync(teamContext, cancellationToken: cancellationToken);
 			var iterationsWithWorkItemReferences = await iterations
-				.Where(iteration => iterationFilter?.Invoke(iteration) ?? iteration.Attributes.TimeFrame == TimeFrame.Past)
-				.TakeLast(take ?? 10)
 				.ToAsyncEnumerable()
 				.SelectAwait(async iteration =>
 				{
-					var iterationWorkItems = await backlogClient.GetIterationWorkItemsAsync(teamContext, iteration.Id, cancellationToken: cancellationToken);
-					return new IterationWithWorkItemsReferences(iteration, iterationWorkItems.WorkItemRelations.Select(wi => wi.Target).ToList());
+					if (iteration.Id != Guid.Empty)
+					{
+						var iterationWorkItems = await backlogClient!.GetIterationWorkItemsAsync(teamContext, iteration.Id, cancellationToken: cancellationToken);
+						return new IterationWithWorkItemsReferences(iteration, iterationWorkItems.WorkItemRelations.Select(wi => wi.Target).ToList());
+					}
+					else
+					{
+						var workItems = await GetWorkItemsOfIterationPath(iteration.Path, cancellationToken);
+						return new IterationWithWorkItemsReferences(iteration, workItems.Select(wi => new WorkItemReference { Id = wi.Id }).ToList());
+					}
 				})
 				.ToListAsync();
 

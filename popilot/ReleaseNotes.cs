@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using Microsoft.TeamFoundation.Work.WebApi;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace popilot
@@ -24,9 +25,13 @@ namespace popilot
 			return new HierarchicalReleaseNotesWorkItems(root, releaseNotess);
 		}
 
-		public async Task<IReleaseNotesWorkItems> OfCurrentOrLastSprints(string? project, string? team, CancellationToken cancellationToken = default)
+		public async Task<IReleaseNotesWorkItems> OfCurrentOrLastSprints(string? project, string? team, int? take = null, CancellationToken cancellationToken = default)
 		{
-			var iterations = await azureDevOps.GetCurrentOrPastIterationsWithCompletedWorkItems(project, team, cancellationToken: cancellationToken);
+			var filteredIterationReferences = (await azureDevOps.GetAllIterations(project, team, cancellationToken))
+				.Where(i => i.Attributes.TimeFrame == TimeFrame.Current || i.Attributes.TimeFrame == TimeFrame.Past)
+				.TakeLast(take ?? 10);
+
+			var iterations = await azureDevOps.GetIterationsWithCompletedWorkItems(project, team, filteredIterationReferences, cancellationToken: cancellationToken);
 			return new FlatReleaseNotesWorkItems(iterations
 				.Select(i => new AzureDevOps.IterationWithWorkItems(
 					i.Iteration,

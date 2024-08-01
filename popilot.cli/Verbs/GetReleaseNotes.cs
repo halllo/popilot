@@ -28,6 +28,9 @@ namespace popilot.cli.Verbs
 		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
 		public bool GenerateDocument { get; set; }
 
+		[Option(longName: "take", Required = false, HelpText = "take sprints (only used if no Id is provided; default 10)")]
+		public int? TakeSprints { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetReleaseNotes> logger)
 		{
 			var releaseNotesReader = new ReleaseNotes(azureDevOps);
@@ -50,7 +53,7 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var releaseNotes = await releaseNotesReader.OfCurrentOrLastSprints(Project, Team);
+				var releaseNotes = await releaseNotesReader.OfCurrentOrLastSprints(Project, Team, take: TakeSprints);
 
 				if (GenerateDocument)
 				{

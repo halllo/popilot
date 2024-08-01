@@ -24,6 +24,27 @@ namespace popilot.cli.Verbs
 		}
 	}
 
+	[Verb("get-all-sprints")]
+	class GetAllSprints
+	{
+		[Option('p', longName: "project", Required = false)]
+		public string? Project { get; set; }
+		[Option('t', longName: "team", Required = false)]
+		public string? Team { get; set; }
+
+		public async Task Do(AzureDevOps azureDevOps, ILogger<GetAllSprints> logger)
+		{
+			var sprints = await azureDevOps.GetAllIterations(Project, Team);
+
+			foreach (var sprint in sprints)
+			{
+				Info(sprint.Name, sameLine: true);
+				Boring($" {sprint.Attributes.TimeFrame}; from {sprint.Attributes.StartDate:dd.MM.yyyy} to {sprint.Attributes.FinishDate:dd.MM.yyyy}");
+			}
+			logger.LogInformation("{Sprints} loaded", sprints.Count);
+		}
+	}
+
 	[Verb("get-current-sprint")]
 	class GetSprint
 	{
