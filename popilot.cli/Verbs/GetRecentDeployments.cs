@@ -36,8 +36,8 @@ namespace popilot.cli.Verbs
 				.Where(r => r.OnProduction && r.LastModifiedOn > DateTime.Now.AddHours(-1 * RecentHours));
 
 			var recentlyDeployed = AsyncEnumerable.Concat(
-				recentDeployedBuilds.Select(r => new { name = r.artifactName, version = r.latestBuild.BuildNumber }),
-				recentDeployedReleases.Select(r => new { name = r.ArtifactName.Replace("-main", ""), version = r.ArtifactVersion }));
+				recentDeployedBuilds.Select(r => new { name = r.artifactName.Replace("-main", "", StringComparison.InvariantCultureIgnoreCase), version = r.latestBuild.BuildNumber }),
+				recentDeployedReleases.Select(r => new { name = r.ArtifactName.Replace("-main", "", StringComparison.InvariantCultureIgnoreCase), version = r.ArtifactVersion }));
 
 			var html = new StringBuilder();
 			html.AppendLine("<html><head><style>table { border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; } th { background-color: #f2f2f2; }</style></head><body>");

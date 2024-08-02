@@ -247,7 +247,7 @@ namespace popilot
 			var definitions = await this.buildClient!.GetDefinitionsAsync(
 				project: teamContext.Project,
 				includeLatestBuilds: true,
-				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "").Trim()}" : null));
+				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim()}" : null));
 
 			var recentDeployments = definitions
 				.Where(d => true)
@@ -261,7 +261,7 @@ namespace popilot
 					var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
 					var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
 					var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
-					var artifactName = definition.Name.Replace("-main", "");
+					var artifactName = definition.Name;
 					return new DeployableBuild(definition, artifactName, latestBuild!, timeline!, lastEvent!, stages, hasProd, successfulOnProd);
 				});
 
@@ -280,7 +280,7 @@ namespace popilot
 
 			var releaseDefinitions = await this.releaseClient!.GetReleaseDefinitionsAsync(
 				project: teamContext.Project,
-				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "").Trim()}" : null),
+				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim()}" : null),
 				searchText: searchText,
 				expand: Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.Contracts.ReleaseDefinitionExpands.LastRelease);
 
@@ -615,8 +615,8 @@ namespace popilot
 				structureGroup: TreeStructureGroup.Iterations,
 				depth: 2);
 
-			var teamIterationPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "").Trim();
-			bool hasTeamPath = root.Children.Any(c => c.Name == teamIterationPathName);
+			var teamIterationPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim();
+			bool hasTeamPath = root.Children.Any(c => string.Equals(c.Name, teamIterationPathName, StringComparison.InvariantCultureIgnoreCase));
 			if (hasTeamPath)
 			{
 				root = await this.workItemClient!.GetClassificationNodeAsync(
@@ -647,7 +647,7 @@ namespace popilot
 					Id = Guid.Empty,
 					Name = s.Name,
 					Links = s.Links,
-					Path = s.Path.Replace("\\Iteration\\", "\\").TrimStart('\\'),
+					Path = s.Path.Replace("\\Iteration\\", "\\", StringComparison.InvariantCultureIgnoreCase).TrimStart('\\'),
 					Url = s.Url,
 				})
 				.OrderBy(s => s.Attributes.FinishDate)
