@@ -27,6 +27,7 @@
 		<PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="19.225.1" />
 		<PackageReference Include="Microsoft.VisualStudio.Services.InteractiveClient" Version="19.225.1" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+		<PackageReference Include="Microsoft.VisualStudio.Services.Release.Client" Version="19.225.1" />
 		<PackageReference Include="NodaTime" Version="3.1.11" />
 		<PackageReference Include="Sandwych.QuickGraph.Core" Version="1.0.0" />
 		<PackageReference Include="System.Interactive" Version="6.0.1" />

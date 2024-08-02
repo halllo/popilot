@@ -21,25 +21,14 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetPipelines> logger)
 		{
-			var teamContext = new TeamContext(Project ?? azureDevOps.options.Value.DefaultProject);
-			await azureDevOps.Init();
-			var definitions = await azureDevOps.buildClient!.GetDefinitionsAsync(teamContext.Project, includeLatestBuilds: true, path: PathPrefix);
-			var filteredDefinitions = definitions.Where(d => SearchText == null || d.Name.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase)).ToList();
-
-			var rows = await filteredDefinitions.ToAsyncEnumerable()
-				.SelectAwait(async definition =>
+			var deployableBuilds = azureDevOps.GetDeployableBuilds(Project, null, PathPrefix)
+				.Where(d => SearchText == null || d.artifactName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase))
+				.Select(d =>
 				{
-					var latestBuild = definition.LatestBuild;
-					var timeline = latestBuild?.Id != null ? await azureDevOps.buildClient.GetBuildTimelineAsync(teamContext.Project, latestBuild.Id) : null;
-					var lastEvent = timeline?.Records.MaxBy(r => r.FinishTime);
-					var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
-					var stageStatus = string.Join("-", stages.Select(GetPipeline.Icon));
-					var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
-					var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
-					return new { definition, latestBuild, timeline, lastEvent, stageStatus, hasProd, successfulOnProd };
+					var stageStatus = string.Join("-", d.stages.Select(GetPipeline.Icon));
+					return new { d.definition, d.latestBuild, d.timeline, d.lastEvent, stageStatus, d.hasProd, d.successfulOnProd };
 				})
-				.OrderByDescending(r => r.lastEvent?.FinishTime)
-				.ToListAsync();
+				.OrderByDescending(r => r.lastEvent?.FinishTime);
 
 			var table = new Table().Expand();
 			table.AddColumn("#");
@@ -48,6 +37,7 @@ namespace popilot.cli.Verbs
 			table.AddColumn("Status");
 			table.AddColumn("Event Time");
 			table.ShowRowSeparators = true;
+			var rows = await deployableBuilds.ToListAsync();
 			foreach (var row in rows)
 			{
 				table.AddRow(
@@ -161,6 +151,35 @@ namespace popilot.cli.Verbs
 			}
 			AnsiConsole.Write(table);
 			logger.LogInformation("{Count} records loaded", filteredRecords.Count);
+
+			var workItems = await azureDevOps.GetBuildRelatedWorkItems(teamContext.Project, BuildId);
+
+			Console.WriteLine();
+			foreach (var workItem in workItems)
+			{
+				Display(workItem);
+			}
+			logger.LogInformation("{Count} work items referenced", workItems.Count);
+		}
+	}
+
+
+	[Verb("get-releasepipelines")]
+	class GetReleases
+	{
+		[Option('p', longName: "project", Required = false)]
+		public string? Project { get; set; }
+
+		[Option(longName: "path", Required = false, HelpText = "path of pipelines")]
+		public string? PathPrefix { get; set; }
+
+		[Option('s', longName: "search", Required = false, HelpText = "search string")]
+		public string? SearchText { get; set; }
+
+		public async Task Do(AzureDevOps azureDevOps, ILogger<GetPipelines> logger)
+		{
+			var releases = await azureDevOps.GetDeployableReleases(Project, SearchText).ToListAsync();
+			Json.Out(releases);
 		}
 	}
 }

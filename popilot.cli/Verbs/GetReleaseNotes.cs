@@ -53,13 +53,13 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var releaseNotes = await releaseNotesReader.OfCurrentOrLastSprints(Project, Team, take: TakeSprints);
+				var releaseNotes = await releaseNotesReader.OfRecentClosings(Project, Team, take: TakeSprints);
 
 				if (GenerateDocument)
 				{
 					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: NullIfEmpty(AllowedTags));
 
-					var fileName = $"releasenotes_lastsprints_{DateTime.Now:yyyyMMdd-HHmmss}.html";
+					var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);
 					Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
 				}
@@ -81,11 +81,11 @@ namespace popilot.cli.Verbs
 	{
 		public static void ConsoleOut(this ReleaseNotes.IReleaseNotesWorkItems releaseNotes)
 		{
-			var iterations = (releaseNotes as ReleaseNotes.FlatReleaseNotesWorkItems)?.IterationsWithWorkItems;
-			foreach (var iteration in iterations.NeverNull().Reverse())
+			var groups = (releaseNotes as ReleaseNotes.GroupedReleaseNotesWorkItems)?.GroupedWorkItems;
+			foreach (var group in groups.NeverNull().Reverse())
 			{
-				AnsiConsole.MarkupLine($"[bold]{iteration.Iteration.Attributes.FinishDate:dd.MM.yyyy}[/] {iteration.Iteration.Path}");
-				foreach (var workItem in iteration.WorkItems)
+				AnsiConsole.MarkupLine($"[bold]{group.GroupName}[/]");
+				foreach (var workItem in group.WorkItems)
 				{
 					var panel = new Panel(workItem.ReleaseNotes);
 					panel.Header = new PanelHeader($"#{workItem.Id} {string.Join(", ", workItem.Tags.Except(["ReleaseNotes"]))}") { Justification = Justify.Left };

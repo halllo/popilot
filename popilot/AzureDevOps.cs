@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Graph.Models;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Extensions.Msal;
 using Microsoft.TeamFoundation.Build.WebApi;
@@ -10,6 +11,7 @@ using Microsoft.TeamFoundation.WorkItemTracking.WebApi;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
 using Microsoft.VisualStudio.Services.Client;
 using Microsoft.VisualStudio.Services.Common;
+using Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.Clients;
 using Microsoft.VisualStudio.Services.WebApi;
 using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
 using QuickGraph;
@@ -28,6 +30,7 @@ namespace popilot
 		public WorkHttpClient? backlogClient;
 		public ProjectHttpClient? projectClient;
 		public BuildHttpClient? buildClient;
+		public ReleaseHttpClient? releaseClient;
 
 		private static async Task<AuthenticationResult> AcquireAccessToken(string tenantId, string clientId, string? username, string? password, ILogger<AzureDevOps> logger)
 		{
@@ -85,6 +88,7 @@ namespace popilot
 			this.workItemClient = connection.GetClient<WorkItemTrackingHttpClient>();
 			this.backlogClient = connection.GetClient<WorkHttpClient>();
 			this.buildClient = connection.GetClient<BuildHttpClient>();
+			this.releaseClient = connection.GetClient<ReleaseHttpClient>();
 			this.projectClient = connection.GetClient<ProjectHttpClient>();
 		}
 
@@ -92,6 +96,9 @@ namespace popilot
 		{
 			this.backlogClient?.Dispose();
 			this.workItemClient?.Dispose();
+			this.buildClient?.Dispose();
+			this.releaseClient?.Dispose();
+			this.projectClient?.Dispose();
 			this.connection?.Dispose();
 		}
 
@@ -214,6 +221,117 @@ namespace popilot
 
 
 
+
+
+		public async Task<IReadOnlyCollection<IWorkItemDto>> GetBuildRelatedWorkItems(string? project, int buildId)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? this.options.Value.DefaultProject);
+
+			var workItemReferences = await this.buildClient!.GetBuildWorkItemsRefsAsync(teamContext.Project, buildId);
+			var workItems = await this.GetWorkItems(workItemReferences.Select(w => int.Parse(w.Id)));
+			return workItems;
+		}
+
+
+
+
+
+
+
+		public async IAsyncEnumerable<DeployableBuild> GetDeployableBuilds(string? project, string? team, string? pathPrefix = null)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? this.options.Value.DefaultProject);
+
+			var definitions = await this.buildClient!.GetDefinitionsAsync(
+				project: teamContext.Project,
+				includeLatestBuilds: true,
+				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "").Trim()}" : null));
+
+			var recentDeployments = definitions
+				.Where(d => true)
+				.OrderBy(d => d.Name)
+				.ToAsyncEnumerable()
+				.SelectAwait(async definition =>
+				{
+					var latestBuild = definition.LatestBuild;
+					var timeline = latestBuild?.Id != null ? await this.buildClient.GetBuildTimelineAsync(teamContext.Project, latestBuild.Id) : null;
+					var lastEvent = timeline?.Records.MaxBy(r => r.FinishTime);
+					var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
+					var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
+					var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
+					var artifactName = definition.Name.Replace("-main", "");
+					return new DeployableBuild(definition, artifactName, latestBuild!, timeline!, lastEvent!, stages, hasProd, successfulOnProd);
+				});
+
+			await foreach (var recentDeployment in recentDeployments)
+			{
+				yield return recentDeployment;
+			}
+		}
+		public record DeployableBuild(BuildDefinitionReference definition, string artifactName, Build latestBuild, Timeline timeline, TimelineRecord lastEvent, IEnumerable<TimelineRecord> stages, bool hasProd, bool successfulOnProd);
+
+
+		public async IAsyncEnumerable<DeployableRelease> GetDeployableReleases(string? project, string? team, string? pathPrefix = null, string? searchText = null)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? this.options.Value.DefaultProject);
+
+			var releaseDefinitions = await this.releaseClient!.GetReleaseDefinitionsAsync(
+				project: teamContext.Project,
+				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "").Trim()}" : null),
+				searchText: searchText,
+				expand: Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.Contracts.ReleaseDefinitionExpands.LastRelease);
+
+			var allReleases = releaseDefinitions
+				.Select(r => new
+				{
+					r.Id,
+					r.Name,
+					r.Path,
+					LastReleaseId = r.LastRelease.Id,
+					LastReleaseName = r.LastRelease.Name,
+				})
+				.ToAsyncEnumerable()
+				.SelectManyAwait(async releaseDefinition =>
+				{
+					var releases = await this.releaseClient.GetReleasesAsync(
+						project: teamContext.Project,
+						definitionId: releaseDefinition.Id,
+						expand: Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.Contracts.ReleaseExpands.Environments
+							  | Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.Contracts.ReleaseExpands.Artifacts);
+
+					var releasesReduced = releases.Select(r => new
+					{
+						r.Id,
+						r.Name,
+						OnStaging = r.Environments.Any(e => e.Name.StartsWith("Stag", StringComparison.InvariantCultureIgnoreCase) && e.Status == Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.EnvironmentStatus.Succeeded),
+						OnProduction = r.Environments.Any(e => e.Name.StartsWith("Prod", StringComparison.InvariantCultureIgnoreCase) && e.Status == Microsoft.VisualStudio.Services.ReleaseManagement.WebApi.EnvironmentStatus.Succeeded),
+						ArtifactName = r.Artifacts.Single().DefinitionReference["definition"].Name,
+						ArtifactVersion = r.Artifacts.Single().DefinitionReference["version"].Name,
+						LastModifiedOn = r.Environments.Max(e => e.DeploySteps.Any() ? e.DeploySteps.Max(s => s.LastModifiedOn) : (DateTime?)null)
+					});
+
+					return releasesReduced.ToAsyncEnumerable();
+				})
+				.OrderByDescending(r => r.LastModifiedOn)
+				.GroupBy(r => r.ArtifactName)
+				.SelectAwait(async r => new DeployableRelease
+				(
+					r.Key,
+					await r.Select(e => e.ArtifactVersion).FirstAsync(),
+					await r.Select(e => e.OnStaging).FirstAsync(),
+					await r.Select(e => e.OnProduction).FirstAsync(),
+					await r.Select(e => e.LastModifiedOn).FirstAsync()
+				));
+
+			await foreach (var release in allReleases)
+			{
+				yield return release;
+			}
+		}
+		public record DeployableRelease(string ArtifactName, string ArtifactVersion, bool OnStaging, bool OnProduction, DateTime? LastModifiedOn);
 
 
 
@@ -491,10 +609,22 @@ namespace popilot
 		public async Task<List<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
+
 			var root = await this.workItemClient!.GetClassificationNodeAsync(
-				project ?? options.Value.DefaultProject, TreeStructureGroup.Iterations,
-				path: $"\\{(team ?? options.Value.DefaultTeam ?? "").Replace("Team", "").Trim()}",
+				project: project ?? options.Value.DefaultProject,
+				structureGroup: TreeStructureGroup.Iterations,
 				depth: 2);
+
+			var teamIterationPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "").Trim();
+			bool hasTeamPath = root.Children.Any(c => c.Name == teamIterationPathName);
+			if (hasTeamPath)
+			{
+				root = await this.workItemClient!.GetClassificationNodeAsync(
+					project: project ?? options.Value.DefaultProject,
+					structureGroup: TreeStructureGroup.Iterations,
+					path: teamIterationPathName,
+					depth: 2);
+			}
 
 			var sprints = EnumerableExtensions
 				.Tree([root], parent => parent.Children)
@@ -509,7 +639,7 @@ namespace popilot
 							(DateTime start, DateTime end) when end < DateTime.Now => TimeFrame.Past,
 							(DateTime start, DateTime end) when start < DateTime.Now && DateTime.Now < end => TimeFrame.Current,
 							(DateTime start, DateTime end) when DateTime.Now < start => TimeFrame.Future,
-							_ => throw new ArgumentOutOfRangeException(nameof(TeamIterationAttributes.TimeFrame)),
+							_ => null,
 						},
 						StartDate = (DateTime)s.Attributes["startDate"],
 						FinishDate = (DateTime)s.Attributes["finishDate"],
@@ -559,6 +689,11 @@ namespace popilot
 			return GetWorkItems(wiql: $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iterationPath}'", cancellationToken);
 		}
 
+		public Task<IEnumerable<WorkItemReference>> GetWorkItemReferencesOfIterationPath(string iterationPath, CancellationToken cancellationToken = default)
+		{
+			return GetWorkItemReferences(wiql: $"select System.Id,System.Title,System.State from workitems where [System.IterationPath] = '{iterationPath}'", cancellationToken);
+		}
+
 		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<int> ids, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
@@ -568,10 +703,16 @@ namespace popilot
 
 		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(string wiql, CancellationToken cancellationToken = default)
 		{
+			var workItemReferences = await GetWorkItemReferences(wiql, cancellationToken);
+			var workItems = await GetWorkItemsWithParents(workItemReferences, cancellationToken);
+			return workItems;
+		}
+
+		public async Task<IEnumerable<WorkItemReference>> GetWorkItemReferences(string wiql, CancellationToken cancellationToken = default)
+		{
 			await this.Init();
 			var queryResults = await workItemClient!.QueryByWiqlAsync(new Wiql { Query = wiql }, cancellationToken: cancellationToken);
-			var workItems = await GetWorkItemsWithParents(queryResults.WorkItems, cancellationToken);
-			return workItems;
+			return queryResults.WorkItems;
 		}
 
 
@@ -628,8 +769,8 @@ namespace popilot
 					}
 					else
 					{
-						var workItems = await GetWorkItemsOfIterationPath(iteration.Path, cancellationToken);
-						return new IterationWithWorkItemsReferences(iteration, workItems.Select(wi => new WorkItemReference { Id = wi.Id }).ToList());
+						var workItemReferences = await GetWorkItemReferencesOfIterationPath(iteration.Path, cancellationToken);
+						return new IterationWithWorkItemsReferences(iteration, workItemReferences.ToList());
 					}
 				})
 				.ToListAsync();
