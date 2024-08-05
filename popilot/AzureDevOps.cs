@@ -751,7 +751,7 @@ namespace popilot
 				.Where(i => i.Attributes.TimeFrame == TimeFrame.Past)
 				.TakeLast(take ?? 10);
 
-			return await GetIterationsWithCompletedWorkItems(project, team, iterations, cancellationToken);
+			return await GetIterationsWithCompletedWorkItems(project, team, filteredIterations, cancellationToken);
 		}
 
 		public async Task<IReadOnlyList<IterationWithWorkItems>> GetIterationsWithCompletedWorkItems(string? project, string? team, IEnumerable<TeamSettingsIteration> iterations, CancellationToken cancellationToken = default)
