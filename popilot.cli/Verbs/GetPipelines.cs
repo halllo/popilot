@@ -65,9 +65,12 @@ namespace popilot.cli.Verbs
 		[Value(0, MetaName = "definition ID (int)", Required = true)]
 		public int DefinitionId { get; set; }
 
+		[Option('p', longName: "project", Required = false)]
+		public string? Project { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetPipeline> logger)
 		{
-			var teamContext = new TeamContext(azureDevOps.options.Value.DefaultProject, azureDevOps.options.Value.DefaultTeam);
+			var teamContext = new TeamContext(Project ?? azureDevOps.options.Value.DefaultProject, azureDevOps.options.Value.DefaultTeam);
 			await azureDevOps.Init();
 			var definition = await azureDevOps.buildClient!.GetDefinitionAsync(teamContext.Project, DefinitionId);
 			Boring(Json(definition));

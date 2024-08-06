@@ -18,6 +18,9 @@ namespace popilot.cli.Verbs
 		[Option(longName: "path", Required = false, HelpText = "path of pipelines")]
 		public string? PathPrefix { get; set; }
 
+		[Option(longName: "latestBuilds", Required = false, HelpText = "how many builds to look back (default is 1)")]
+		public int? LatestBuilds { get; set; }
+
 		[Option('h', longName: "hours", Required = false, HelpText = "recent hours (default is 8)")]
 		public int RecentHours { get; set; } = 8;
 
@@ -29,7 +32,7 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetPipelines> logger)
 		{
-			var recentDeployedBuilds = azureDevOps.GetDeployableBuilds(Project, Team, PathPrefix)
+			var recentDeployedBuilds = azureDevOps.GetDeployableBuilds(Project, Team, PathPrefix, LatestBuilds)
 				.Where(r => r.successfulOnProd && r.lastEvent?.FinishTime > DateTime.Now.AddHours(-1 * RecentHours));
 
 			var recentDeployedReleases = azureDevOps.GetDeployableReleases(Project, null, null)
@@ -50,7 +53,7 @@ namespace popilot.cli.Verbs
 			html.AppendLine("</ul>");
 			if (ReleaseNotesUrl != null)
 			{
-				html.AppendLine($"\nRelease Notes are available at <a href=\"{ReleaseNotesUrl}\">{ReleaseNotesUrl}</a>.");
+				html.AppendLine($"\nRelease Notes are available <a href=\"{ReleaseNotesUrl}\">here</a>.");
 			}
 			html.AppendLine("</body></html>");
 

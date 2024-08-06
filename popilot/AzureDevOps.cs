@@ -239,30 +239,40 @@ namespace popilot
 
 
 
-		public async IAsyncEnumerable<DeployableBuild> GetDeployableBuilds(string? project, string? team, string? pathPrefix = null)
+		public async IAsyncEnumerable<DeployableBuild> GetDeployableBuilds(string? project, string? team, string? pathPrefix = null, int? latestBuilds = null)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? this.options.Value.DefaultProject);
 
 			var definitions = await this.buildClient!.GetDefinitionsAsync(
 				project: teamContext.Project,
-				includeLatestBuilds: true,
+				includeLatestBuilds: (latestBuilds ?? 1) == 1,
 				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim()}" : null));
 
 			var recentDeployments = definitions
-				.Where(d => true)
 				.OrderBy(d => d.Name)
 				.ToAsyncEnumerable()
-				.SelectAwait(async definition =>
+				.SelectManyAwait(async definition =>
 				{
-					var latestBuild = definition.LatestBuild;
-					var timeline = latestBuild?.Id != null ? await this.buildClient.GetBuildTimelineAsync(teamContext.Project, latestBuild.Id) : null;
-					var lastEvent = timeline?.Records.MaxBy(r => r.FinishTime);
-					var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
-					var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
-					var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
-					var artifactName = definition.Name;
-					return new DeployableBuild(definition, artifactName, latestBuild!, timeline!, lastEvent!, stages, hasProd, successfulOnProd);
+					Build[] builds = (latestBuilds ?? 1) == 1
+						? ([definition.LatestBuild])
+						: (await this.buildClient.GetBuildsAsync(project: teamContext.Project, definitions: [definition.Id]))
+							.OrderByDescending(b => b.QueueTime)
+							.Take(latestBuilds ?? 1)
+							.ToArray();
+					
+					return builds
+						.ToAsyncEnumerable()
+						.SelectAwait(async build =>
+						{
+							var timeline = build?.Id != null ? await this.buildClient.GetBuildTimelineAsync(teamContext.Project, build.Id) : null;
+							var lastEvent = timeline?.Records.MaxBy(r => r.FinishTime);
+							var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
+							var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
+							var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
+							var artifactName = definition.Name;
+							return new DeployableBuild(definition, build!, artifactName, timeline!, lastEvent!, stages, hasProd, successfulOnProd);
+						});
 				});
 
 			await foreach (var recentDeployment in recentDeployments)
@@ -270,7 +280,7 @@ namespace popilot
 				yield return recentDeployment;
 			}
 		}
-		public record DeployableBuild(BuildDefinitionReference definition, string artifactName, Build latestBuild, Timeline timeline, TimelineRecord lastEvent, IEnumerable<TimelineRecord> stages, bool hasProd, bool successfulOnProd);
+		public record DeployableBuild(BuildDefinitionReference definition, Build latestBuild, string artifactName, Timeline timeline, TimelineRecord lastEvent, IEnumerable<TimelineRecord> stages, bool hasProd, bool successfulOnProd);
 
 
 		public async IAsyncEnumerable<DeployableRelease> GetDeployableReleases(string? project, string? team, string? pathPrefix = null, string? searchText = null)
