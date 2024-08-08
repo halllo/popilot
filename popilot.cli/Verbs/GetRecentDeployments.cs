@@ -46,7 +46,7 @@ namespace popilot.cli.Verbs
 			html.AppendLine("<html><head><style>table { border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; } th { background-color: #f2f2f2; }</style></head><body>");
 			html.AppendLine("We have deployed the following services to production:");
 			html.AppendLine("<ul>");
-			await foreach (var deployment in recentlyDeployed)
+			await foreach (var deployment in recentlyDeployed.OrderBy(d => d.name))
 			{
 				html.AppendLine($"<li>{deployment.name} {deployment.version}</li>");
 			}
