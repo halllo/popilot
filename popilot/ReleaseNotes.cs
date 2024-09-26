@@ -60,6 +60,7 @@ namespace popilot
 		public interface IReleaseNotesWorkItems
 		{
 			string Html(bool retainFirstH1, bool showTags, string[]? allowedTags = null);
+			string Md();
 		}
 
 		public record WorkItemsGroup(string GroupName, IReadOnlyList<IWorkItemDto> WorkItems);
@@ -101,6 +102,11 @@ namespace popilot
 						""";
 				return page;
 			}
+
+			public string Md()
+			{
+				throw new NotImplementedException();
+			}
 		}
 
 		public record GroupedReleaseNotesWorkItems(IReadOnlyList<WorkItemsGroup> GroupedWorkItems) : IReleaseNotesWorkItems
@@ -126,6 +132,75 @@ namespace popilot
 					}
 				}
 				stringBuilder.AppendLine("""</div>""");
+				var releaseNotes = stringBuilder.ToString();
+				return releaseNotes;
+			}
+
+			public string Md()
+			{
+				static Func<string, string> replaceElement(string element, Func<string, string>? replacor = null)
+				{
+					var matcher = new Regex($"<{element}.*?>(?<inner>.*?)</{element}>", RegexOptions.Compiled | RegexOptions.Singleline);
+					return text => matcher.Replace(text, m => m.Success ? (replacor ?? (inner => inner.Trim())).Invoke(m.Groups["inner"].Value.Trim()) : string.Empty);
+				}
+				static Func<string, string> repeat(int times, Func<string, string> f) => text =>
+				{
+					var current = text;
+					foreach (var ff in Enumerable.Repeat(f, times))
+					{
+						current = ff(current);
+					}
+					return current;
+				};
+				var replaceDiv = replaceElement("div", inner => $"\n{inner}\n");
+				var replaceSpan = replaceElement("span", inner => $" {inner}");
+				var replacePre = replaceElement("pre");
+				var replaceCode = replaceElement("code", inner => $"\n```json\n{inner}\n```\n\n");
+				var replaceU = replaceElement("u");
+				var replaceItalic = replaceElement("i", inner => $"*{inner}*");
+				var replaceBold = replaceElement("b", inner => $"**{inner}**");
+				var replaceLi = replaceElement("li", inner => inner.StartsWith(".\\") ? $"```powershell\n{inner.Replace("<br>", "").Trim()}\n```\n\n" : $"- {inner}\n");
+				var replaceUl = replaceElement("ul", inner => $"\n\n{replaceLi(inner).Trim()}\n");
+				var replaceA = new Regex("<a href=\"(?<href>.*?)\".*?>(?<content>.*?)</a>", RegexOptions.Compiled);
+				var replaceBr = new Regex("<br.*?>", RegexOptions.Compiled);
+				string clean(string text) => text
+					.Return()
+					.Select(repeat(4, replaceDiv))
+					.Select(repeat(3, replaceSpan))
+					.Select(replacePre)
+					.Select(replaceCode)
+					.Select(replaceU)
+					.Select(replaceItalic)
+					.Select(replaceBold)
+					.Select(replaceUl)
+					.Select(s => replaceA.Replace(s, m => m.Success ? $"[{m.Groups["content"].Value.Trim()}]({m.Groups["href"].Value.Trim()})" : string.Empty))
+					.Select(s => s.Replace("&nbsp;", " "))
+					.Select(s => s.Replace("&quot;", "\""))
+					.Select(s => replaceBr.Replace(s, m => m.Success ? "\n" : string.Empty))
+					.Select(s => s.Replace("⚠️", "\n\n⚠️"))
+					.Select(repeat(3, s => s.Replace("  ", " ")))
+					.Select(s => s.Replace("\n \n", "\n\n"))
+					.Select(s => s.Replace("\n\n\n", "\n\n"))
+					.Select(s => s.Trim())
+					.Single();
+
+				var stringBuilder = new StringBuilder();
+				stringBuilder.AppendLine("# Release Notes");
+				stringBuilder.AppendLine();
+				foreach (var group in GroupedWorkItems)
+				{
+					stringBuilder.AppendLine($"## {group.GroupName}");
+					stringBuilder.AppendLine();
+					foreach (var workItem in group.WorkItems)
+					{
+						stringBuilder.AppendLine($"#{workItem.Id}");
+						stringBuilder.AppendLine();
+
+						var relasenotes = clean(workItem.ReleaseNotes);
+						stringBuilder.AppendLine($"""{relasenotes}""");
+						stringBuilder.AppendLine();
+					}
+				}
 				var releaseNotes = stringBuilder.ToString();
 				return releaseNotes;
 			}

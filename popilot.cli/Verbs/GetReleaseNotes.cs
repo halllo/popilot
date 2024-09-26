@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace popilot.cli.Verbs
 {
@@ -25,8 +27,11 @@ namespace popilot.cli.Verbs
 		[Option(longName: "allowed-tags", Required = false, HelpText = "allowed tags")]
 		public IEnumerable<string> AllowedTags { get; set; } = [];
 
-		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
-		public bool GenerateDocument { get; set; }
+		[Option('o', longName: "output", Required = false, HelpText = "console (default), html, md")]
+		public string? Output { get; set; }
+
+		[Option(longName: "merge-into", Required = false, HelpText = "merge into existing document (only supported for md output)")]
+		public string? MergeInto { get; set; }
 
 		[Option(longName: "take", Required = false, HelpText = "take sprints (only used if no Id is provided; default 10)")]
 		public int? TakeSprints { get; set; }
@@ -40,7 +45,7 @@ namespace popilot.cli.Verbs
 				var releaseNotes = await releaseNotesReader.OfWorkItem(Id.Value);
 				var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: NullIfEmpty(AllowedTags));
 
-				if (GenerateDocument)
+				if (string.Equals(Output, "html", StringComparison.InvariantCultureIgnoreCase))
 				{
 					var fileName = $"releasenotes_{Id}_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);
@@ -55,13 +60,51 @@ namespace popilot.cli.Verbs
 			{
 				var releaseNotes = await releaseNotesReader.OfRecentClosings(Project, Team, take: TakeSprints);
 
-				if (GenerateDocument)
+				if (string.Equals(Output, "html", StringComparison.InvariantCultureIgnoreCase))
 				{
 					var html = releaseNotes.Html(retainFirstH1: !HideFirstH1, showTags: !HideTags, allowedTags: NullIfEmpty(AllowedTags));
 
 					var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.html";
 					File.WriteAllText(fileName, html);
 					Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+				}
+				else if (string.Equals(Output, "md", StringComparison.InvariantCultureIgnoreCase))
+				{
+					var md = releaseNotes.Md();
+
+					if (!string.IsNullOrWhiteSpace(MergeInto))
+					{
+						if (File.Exists(MergeInto))
+						{
+							var newHeadings = md.Split("##", StringSplitOptions.RemoveEmptyEntries);
+							var lastNewHeading = newHeadings.Last();
+
+							var existingMd = File.ReadAllText(MergeInto);
+							var existingHeadings = existingMd.Split("##", StringSplitOptions.RemoveEmptyEntries);
+							var olderThanNewHeadings = existingHeadings.Reverse().TakeWhile(existingHeading => !existingHeading.StartsWith(lastNewHeading.Split("\n").First())).Reverse().ToList();
+
+							if (olderThanNewHeadings.Count == existingHeadings.Length)//last new heading is older than oldest existing heading => keep all new headings
+							{
+								olderThanNewHeadings = [];
+							}
+
+							var mergedMd = string.Join("##", newHeadings.Concat(olderThanNewHeadings));
+
+							File.WriteAllText(MergeInto, mergedMd);
+							Process.Start(new ProcessStartInfo(new FileInfo(MergeInto).FullName) { UseShellExecute = true });
+						}
+						else
+						{
+							File.WriteAllText(MergeInto, md);
+							Process.Start(new ProcessStartInfo(new FileInfo(MergeInto).FullName) { UseShellExecute = true });
+						}
+					}
+					else
+					{
+						var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.md";
+						File.WriteAllText(fileName, md);
+						Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+					}
 				}
 				else
 				{
