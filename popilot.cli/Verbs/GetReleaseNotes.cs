@@ -27,6 +27,9 @@ namespace popilot.cli.Verbs
 		[Option(longName: "allowed-tags", Required = false, HelpText = "allowed tags")]
 		public IEnumerable<string> AllowedTags { get; set; } = [];
 
+		[Option(longName: "replace-by-link", Required = false, HelpText = "replace by link")]
+		public string? ReplaceByLink { get; set; }
+		
 		[Option('o', longName: "output", Required = false, HelpText = "console (default), html, md")]
 		public string? Output { get; set; }
 
@@ -71,6 +74,12 @@ namespace popilot.cli.Verbs
 				else if (string.Equals(Output, "md", StringComparison.InvariantCultureIgnoreCase))
 				{
 					var md = releaseNotes.Md();
+
+					if (!string.IsNullOrWhiteSpace(ReplaceByLink))
+					{
+						var replaceByLinkSplit = ReplaceByLink.Split("=", StringSplitOptions.RemoveEmptyEntries);
+						md = Regex.Replace(md, replaceByLinkSplit[0], m => $"[{m.Groups[0].Value.Trim()}]({string.Format(replaceByLinkSplit[1], m.Groups[1].Value.Trim())})");
+					}
 
 					if (!string.IsNullOrWhiteSpace(MergeInto))
 					{

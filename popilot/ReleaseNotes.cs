@@ -155,7 +155,7 @@ namespace popilot
 				var replaceDiv = replaceElement("div", inner => $"\n{inner}\n");
 				var replaceSpan = replaceElement("span", inner => $" {inner}");
 				var replacePre = replaceElement("pre");
-				var replaceCode = replaceElement("code", inner => $"\n```json\n{inner}\n```\n\n");
+				var replaceCode = replaceElement("code", inner => $"\n```json\n{inner.Replace("\n\n\n", "\n").Replace("\n\n", "\n")}\n```\n\n");
 				var replaceU = replaceElement("u");
 				var replaceItalic = replaceElement("i", inner => $"*{inner}*");
 				var replaceBold = replaceElement("b", inner => $"**{inner}**");
@@ -166,7 +166,8 @@ namespace popilot
 				string clean(string text) => text
 					.Return()
 					.Select(repeat(4, replaceDiv))
-					.Select(repeat(3, replaceSpan))
+					.Select(repeat(4, replaceSpan))
+					.Select(s => replaceBr.Replace(s, m => m.Success ? "\n" : string.Empty))
 					.Select(replacePre)
 					.Select(replaceCode)
 					.Select(replaceU)
@@ -176,8 +177,6 @@ namespace popilot
 					.Select(s => replaceA.Replace(s, m => m.Success ? $"[{m.Groups["content"].Value.Trim()}]({m.Groups["href"].Value.Trim()})" : string.Empty))
 					.Select(s => s.Replace("&nbsp;", " "))
 					.Select(s => s.Replace("&quot;", "\""))
-					.Select(s => replaceBr.Replace(s, m => m.Success ? "\n" : string.Empty))
-					.Select(s => s.Replace("⚠️", "\n\n⚠️"))
 					.Select(repeat(3, s => s.Replace("  ", " ")))
 					.Select(s => s.Replace("\n \n", "\n\n"))
 					.Select(s => s.Replace("\n\n\n", "\n\n"))
