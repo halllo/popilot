@@ -30,7 +30,7 @@ namespace popilot.cli.Verbs
 		[Option(longName: "replace-by-link", Required = false, HelpText = "replace by link")]
 		public string? ReplaceByLink { get; set; }
 		
-		[Option('o', longName: "output", Required = false, HelpText = "console (default), html, md")]
+		[Option('o', longName: "output", Required = false, HelpText = "console (default), html, md, xml")]
 		public string? Output { get; set; }
 
 		[Option(longName: "merge-into", Required = false, HelpText = "merge into existing document (only supported for md output)")]
@@ -114,6 +114,14 @@ namespace popilot.cli.Verbs
 						File.WriteAllText(fileName, md);
 						Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
 					}
+				}
+				else if (string.Equals(Output, "xml", StringComparison.InvariantCultureIgnoreCase))
+				{
+					var xml = releaseNotes.Xml();
+
+					var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.xml";
+					File.WriteAllText(fileName, xml);
+					Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
 				}
 				else
 				{
