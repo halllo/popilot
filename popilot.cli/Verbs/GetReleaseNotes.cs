@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace popilot.cli.Verbs
@@ -29,7 +28,7 @@ namespace popilot.cli.Verbs
 
 		[Option(longName: "replace-by-link", Required = false, HelpText = "replace by link")]
 		public string? ReplaceByLink { get; set; }
-		
+
 		[Option('o', longName: "output", Required = false, HelpText = "console (default), html, md, xml")]
 		public string? Output { get; set; }
 
@@ -119,9 +118,17 @@ namespace popilot.cli.Verbs
 				{
 					var xml = releaseNotes.Xml();
 
-					var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.xml";
-					File.WriteAllText(fileName, xml);
-					Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+					if (!string.IsNullOrWhiteSpace(MergeInto))
+					{
+						File.WriteAllText(MergeInto, xml);
+						Process.Start(new ProcessStartInfo(new FileInfo(MergeInto).FullName) { UseShellExecute = true });
+					}
+					else
+					{
+						var fileName = $"releasenotes_recentclosings_{DateTime.Now:yyyyMMdd-HHmmss}.xml";
+						File.WriteAllText(fileName, xml);
+						Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+					}
 				}
 				else
 				{
