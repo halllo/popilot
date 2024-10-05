@@ -7,7 +7,7 @@ namespace popilot
 {
 	public static class OpenAiExtensions
 	{
-		public static async Task<string> GetMessageContentAsString(this AsyncResultCollection<StreamingChatCompletionUpdate> response, bool consoleWrite = true)
+		public static async Task<string> GetMessageContentAsString(this AsyncCollectionResult<StreamingChatCompletionUpdate> response, bool consoleWrite = true)
 		{
 			var sb = new StringBuilder();
 			await foreach (StreamingChatCompletionUpdate update in response)

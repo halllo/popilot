@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Graph.Models;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Extensions.Msal;
 using Microsoft.TeamFoundation.Build.WebApi;
@@ -260,7 +259,7 @@ namespace popilot
 							.OrderByDescending(b => b.QueueTime)
 							.Take(latestBuilds ?? 1)
 							.ToArray();
-					
+
 					return builds
 						.ToAsyncEnumerable()
 						.SelectAwait(async build =>
@@ -725,6 +724,12 @@ namespace popilot
 			return queryResults.WorkItems;
 		}
 
+		public async Task<List<WorkItemUpdate>> GetWorkItemHistory(int id, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var updates = await workItemClient!.GetUpdatesAsync(id, cancellationToken: cancellationToken);
+			return updates;
+		}
 
 		public async Task<IReadOnlyCollection<WorkItem>> GetWorkItemsRaw(IEnumerable<int> ids, CancellationToken cancellationToken = default)
 		{
@@ -925,6 +930,18 @@ namespace popilot
 
 
 
+		public async Task<(TeamSettingsIteration, TeamCapacity)> GetCapacities(string? project, string? team)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
+
+			var iterations = await this.backlogClient!.GetTeamIterationsAsync(teamContext);
+			var currentIteration = iterations.Where(i => i.Attributes.TimeFrame == TimeFrame.Current).Single();
+			var capacities = await this.backlogClient!.GetCapacitiesWithIdentityRefAndTotalsAsync(teamContext, currentIteration.Id);
+			return (currentIteration, capacities);
+		}
+
+
 
 
 
@@ -987,6 +1004,14 @@ namespace popilot
 		public static string? GetTagValue(this Build build, string tagPrefix)
 		{
 			return build.Tags.FirstOrDefault(t => t.StartsWith(tagPrefix + "="))?.Substring((tagPrefix + "=").Length);
+		}
+		public static bool Contains(this IEnumerable<DateRange> dateRange, DateTime date)
+		{
+			return dateRange.Any(dr => dr.Contains(date));
+		}
+		public static bool Contains(this DateRange dateRange, DateTime date)
+		{
+			return dateRange.Start <= date && date <= dateRange.End;
 		}
 	}
 

@@ -9,6 +9,7 @@ using Microsoft.Graph;
 using OpenAI;
 using popilot;
 using Serilog;
+using System.ClientModel;
 using System.Reflection;
 
 System.Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -88,13 +89,13 @@ static IHostBuilder CreateHostBuilder()
 
 			services.AddSingleton(sp => new OpenAiService(
 				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
-					config["OpenAiApiKey"]!,
+					new ApiKeyCredential(config["OpenAiApiKey"]!),
 					new OpenAIClientOptions()),
 				ModelName: config["OpenAiModelName"]!));
 			services.AddSingleton(sp => new AzureOpenAiService(
 				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new AzureOpenAIClient(
 					new Uri(config["AzureOpenAiEndpoint"]!),
-					new AzureKeyCredential(config["AzureOpenAiKey"]!), new AzureOpenAIClientOptions()),
+					new ApiKeyCredential(config["AzureOpenAiKey"]!), new AzureOpenAIClientOptions()),
 				DeploymentName: config["AzureOpenAiDeploymentName"]!));
 			services.AddSingleton<IAi>(sp => sp.GetRequiredService<AzureOpenAiService>());
 
