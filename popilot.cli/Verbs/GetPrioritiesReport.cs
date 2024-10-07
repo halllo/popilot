@@ -181,7 +181,7 @@ namespace popilot.cli.Verbs
 				},
 				PrioSprintEmpty: () =>
 				{
-					html.AppendLine($"""In this sprint we worked on different topics.<br><br>""");
+					html.AppendLine($"""In this sprint we work on different topics.<br><br>""");
 				},
 				Statistics: (sprints, iteration) =>
 				{
@@ -243,7 +243,7 @@ namespace popilot.cli.Verbs
 				},
 				PrioSprintEmpty: () =>
 				{
-					AnsiConsole.WriteLine("In diesem Sprint arbeitet das Team an anderen Themen.");
+					AnsiConsole.WriteLine("In diesem Sprint arbeiten wir an anderen Themen.");
 					AnsiConsole.WriteLine();
 					AnsiConsole.WriteLine();
 				},
