@@ -494,6 +494,7 @@ namespace popilot
 				Id = w.Id ?? 0,
 				Type = w.Fields.GetValueOrDefault("System.WorkItemType", string.Empty).ToString()!,
 				Title = w.Fields.GetValueOrDefault("System.Title", string.Empty).ToString()!,
+				AssignedTo = (w.Fields.GetValueOrDefault("System.AssignedTo", default(IdentityRef)) as IdentityRef)?.DisplayName ?? string.Empty,
 				State = w.Fields.GetValueOrDefault("System.State", string.Empty).ToString()!,
 				Reason = w.Fields.GetValueOrDefault("System.Reason", string.Empty).ToString()!,
 				StoryPoints = int.TryParse(w.Fields.GetValueOrDefault("Microsoft.VSTS.Scheduling.StoryPoints", string.Empty).ToString(), out var parsed) ? parsed : null,
@@ -526,29 +527,12 @@ namespace popilot
 			}).ToList();
 		}
 
-		//public sealed class WorkItemEqualityComparer : IEqualityComparer<IWorkItemDto>
-		//{
-		//	public static WorkItemEqualityComparer Instance { get; } = new WorkItemEqualityComparer();
-
-		//	public bool Equals(IWorkItemDto? x, IWorkItemDto? y)
-		//	{
-		//		if (ReferenceEquals(x, y)) return true;
-		//		if (ReferenceEquals(x, null)) return false;
-		//		if (ReferenceEquals(y, null)) return false;
-		//		if (x.GetType() != y.GetType()) return false;
-		//		return x.Id == y.Id;
-		//	}
-
-		//	public int GetHashCode(IWorkItemDto obj)
-		//	{
-		//		return obj.Id.GetHashCode();
-		//	}
-		//}
 		public interface IWorkItemDto
 		{
 			int Id { get; }
 			string Type { get; }
 			string Title { get; }
+			string AssignedTo { get; }
 			string State { get; }
 			string Reason { get; }
 			string TeamProject { get; }
@@ -580,6 +564,7 @@ namespace popilot
 			public int Id { get; set; }
 			public string Type { get; set; } = null!;
 			public string Title { get; set; } = null!;
+			public string AssignedTo { get; set; } = null!;
 			public string State { get; set; } = null!;
 			public string Reason { get; set; } = null!;
 			public string TeamProject { get; set; } = null!;
