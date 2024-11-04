@@ -1,5 +1,6 @@
 ﻿using Microsoft.TeamFoundation.Work.WebApi;
 using static popilot.AzureDevOps;
+using static popilot.Statistics;
 
 namespace popilot
 {
@@ -55,7 +56,13 @@ namespace popilot
 			var iterations = allSprints.GroupBy(s => string.Join('\\', s.Path.Split('\\').Reverse().Skip(1).Reverse()));
 			var currentIteration = iterations.Single(i => i.Contains(currentSprint));
 
-			var currentIterationWorkItems = await azureDevOps.GetWorkItems(currentIteration);
+			bool childOfParentFeature(IWorkItemDto w) =>
+					w.Type == "User Story"
+				|| (w.Type == "Bug" && w.ParentType == "Feature")
+				|| (w.Type == "Task" && w.ParentType == "Feature");
+
+
+			var currentIterationWorkItems = await azureDevOps.GetWorkItems(currentIteration, childOfParentFeature);
 			var closedWorkItems = currentIterationWorkItems.Where(w => w.State == "Closed");
 			var fractionClosedWorkItems = (double)closedWorkItems.Count() / currentIterationWorkItems.Count();
 			
@@ -74,14 +81,34 @@ namespace popilot
 			var fractionClosedCommittedFeatures = (double)committedFeatures.Where(w => w.State == "Closed").Count() / committedFeatures.Count();
 
 			var previousIteration = iterations.Reverse().SkipWhile(i => i.Key != currentIteration.Key).Skip(1).Take(1).SingleOrDefault();
-			var previousIterationWorkItems = previousIteration == null ? [] : await azureDevOps.GetWorkItems(previousIteration);
+			var previousIterationWorkItems = previousIteration == null ? [] : await azureDevOps.GetWorkItems(previousIteration, childOfParentFeature);
 			var spilloverWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("spillover", StringComparer.InvariantCultureIgnoreCase) ?? false);
 			var fractionSpilloverWorkItems = (double)spilloverWorkItems.Count() / (spilloverWorkItems.Count() + previousIterationWorkItems.Count());
 			
 			var spilloverFeatures = currentIterationFeatures.Where(w => w.Tags.Contains("spillover", StringComparer.InvariantCultureIgnoreCase));
 			var previousIterationFeatures = previousIteration == null ? [] : (await azureDevOps.GetWorkItemsOfIterationPath(previousIteration.Key)).Where(w => w.Type == "Feature");
 			var fractionSpilloverFeatures = (double)spilloverFeatures.Count() / (spilloverFeatures.Count() + previousIterationFeatures.Count());
-			
+
+			var worked = await azureDevOps.GetWorkItems(currentIteration, w
+				=> (w.Type == "Bug" || w.Type == "Task") 
+				&& w.State == "Closed" 
+				&& (w.CompletedWork != null || w.OriginalEstimate != null));
+
+			var workPerSprint = worked
+				.GroupBy(i => i.IterationPath)
+				.Select(iw => new
+				{
+					iteration = iw.Key,
+					nonRoadmapOrRoadmapWork = iw.GroupBy(i => i.RootParentTitle?.Contains("Operations/Maintenance") ?? true)
+				})
+				.Select(iw => new SprintWork
+				{
+					Name = iw.iteration,
+					NonRoadmapWork = iw.nonRoadmapOrRoadmapWork.SingleOrDefault(g => g.Key == true)?.Sum(i => i.CompletedWork ?? i.OriginalEstimate ?? 0.0) ?? 0.0,
+					RoadmapWork = iw.nonRoadmapOrRoadmapWork.SingleOrDefault(g => g.Key == false)?.Sum(i => i.CompletedWork ?? i.OriginalEstimate ?? 0.0) ?? 0.0,
+				})
+				.ToArray();
+
 			return new IterationStatistics(
 				Name: currentIteration.Key,
 				Start: currentIteration.First().Attributes.StartDate!.Value,
@@ -94,7 +121,8 @@ namespace popilot
 				FractionClosedCommittedFeatures: fractionClosedCommittedFeatures,
 				FractionSpilloverWorkItems: fractionSpilloverWorkItems,
 				FractionSpilloverFeatures: fractionSpilloverFeatures,
-				PreviousIterationName: previousIteration?.Key ?? string.Empty
+				PreviousIterationName: previousIteration?.Key ?? string.Empty,
+				SprintWorks: workPerSprint
 			);
 		}
 
@@ -110,7 +138,14 @@ namespace popilot
 			double FractionClosedCommittedFeatures,
 			double FractionSpilloverWorkItems,
 			double FractionSpilloverFeatures,
-			string PreviousIterationName
+			string PreviousIterationName,
+			SprintWork[] SprintWorks
 		);
+
+		public class SprintWork {
+			public string Name { get; set; } = null!;
+			public double NonRoadmapWork {get; set; }
+			public double RoadmapWork { get; set; }
+		}
 	}
 }

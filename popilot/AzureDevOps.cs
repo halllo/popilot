@@ -498,6 +498,9 @@ namespace popilot
 				State = w.Fields.GetValueOrDefault("System.State", string.Empty).ToString()!,
 				Reason = w.Fields.GetValueOrDefault("System.Reason", string.Empty).ToString()!,
 				StoryPoints = int.TryParse(w.Fields.GetValueOrDefault("Microsoft.VSTS.Scheduling.StoryPoints", string.Empty).ToString(), out var parsed) ? parsed : null,
+				OriginalEstimate = (double?)w.Fields.GetValueOrDefault("Microsoft.VSTS.Scheduling.OriginalEstimate", (double?)null),
+				RemainingWork = (double?)w.Fields.GetValueOrDefault("Microsoft.VSTS.Scheduling.RemainingWork", (double?)null),
+				CompletedWork = (double?)w.Fields.GetValueOrDefault("Microsoft.VSTS.Scheduling.CompletedWork", (double?)null),
 				TeamProject = w.Fields.GetValueOrDefault("System.TeamProject", string.Empty).ToString()!,
 				AreaPath = w.Fields.GetValueOrDefault("System.AreaPath", string.Empty).ToString()!,
 				IterationPath = w.Fields.GetValueOrDefault("System.IterationPath", string.Empty).ToString()!,
@@ -539,6 +542,9 @@ namespace popilot
 			string AreaPath { get; }
 			string IterationPath { get; }
 			int? StoryPoints { get; }
+			double? OriginalEstimate { get; }
+			double? RemainingWork { get; }
+			double? CompletedWork { get; }
 			DateTime CreatedDate { get; }
 			DateTime ChangedDate { get; }
 			DateTime? ResolvedDate { get; }
@@ -571,6 +577,9 @@ namespace popilot
 			public string AreaPath { get; set; } = null!;
 			public string IterationPath { get; set; } = null!;
 			public int? StoryPoints { get; set; }
+			public double? OriginalEstimate { get; set; }
+			public double? RemainingWork { get; set; }
+			public double? CompletedWork { get; set; }
 			public DateTime CreatedDate { get; set; }
 			public DateTime ChangedDate { get; set; }
 			public DateTime? ResolvedDate { get; set; }
@@ -658,23 +667,27 @@ namespace popilot
 			return currentIteration;
 		}
 
+		public async Task<TeamSettingsIteration?> GetIteration(string path, string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var iterations = await GetIterations(project, team, cancellationToken);
+			var iteration = iterations.Where(i => i.Path.StartsWith(path)).SingleOrDefault();
+			return iteration;
+		}
+
 		public Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(TeamSettingsIteration iteration, CancellationToken cancellationToken = default)
 		{
 			return GetWorkItemsOfIterationPath(iteration.Path);
 		}
 
-		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<TeamSettingsIteration> iterations, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(IEnumerable<TeamSettingsIteration> iterations, Func<IWorkItemDto, bool>? filter = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 			return await iterations
 				.ToAsyncEnumerable()
 				.SelectAwait(async i => await GetWorkItems(i))
 				.SelectMany(i => i.ToAsyncEnumerable())
-				.Where(w =>
-						w.Type == "User Story"
-					|| (w.Type == "Bug" && w.ParentType == "Feature")
-					|| (w.Type == "Task" && w.ParentType == "Feature")
-				)
+				.Where(w => filter != null ? filter(w) : true)
 				.ToListAsync();
 		}
 
