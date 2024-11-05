@@ -9,5 +9,6 @@
 		public string? Password { get; set; }
 		public string? DefaultProject { get; set; }
 		public string? DefaultTeam { get; set; }
+		public string? NonRoadmapWorkParentTitle { get; set; }
 	}
 }

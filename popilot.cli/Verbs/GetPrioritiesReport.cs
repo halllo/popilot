@@ -199,11 +199,13 @@ namespace popilot.cli.Verbs
 							_ => ""
 						}}
 						<br>
-						{iteration.FractionClosedWorkItems:0,0%} closed WorkItems of current iteration
+						{iteration.FractionClosedWorkItems:0%} closed WorkItems of current iteration
 						<br>
-						{iteration.FractionCommittedWorkItems:0,0%} committed WorkItems of current iteration
+						{iteration.FractionCommittedWorkItems:0%} committed WorkItems of current iteration
 						<br>
-						{iteration.FractionClosedCommittedWorkItems:0,0%} closed committed WorkItems of current iteration
+						{iteration.FractionClosedCommittedWorkItems:0%} closed committed WorkItems of current iteration
+						<br>
+						{iteration.FractionNonRoadmapWork:0%} non-roadmap work");
 						"""
 					);
 				},

@@ -53,7 +53,8 @@ namespace popilot.cli.Verbs
 			Info($"{iteration.FractionCommittedFeatures:0%} Committed Features");
 			Info($"{iteration.FractionSpilloverWorkItems:0%} Spillover US,Bugs,Tasks from {iteration.PreviousIterationName}");
 			Info($"{iteration.FractionSpilloverFeatures:0%} Spillover Features from {iteration.PreviousIterationName}");
-
+			Info($"{iteration.FractionNonRoadmapWork:0%} non-roadmap work");
+			
 			Json.Out(iteration.SprintWorks);
 		}
 	}

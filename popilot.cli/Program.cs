@@ -84,6 +84,7 @@ static IHostBuilder CreateHostBuilder()
 				o.Password = config["AzureDevOpsPassword"];
 				o.DefaultProject = config["DefaultProject"];
 				o.DefaultTeam = config["DefaultTeam"];
+				o.NonRoadmapWorkParentTitle = config["NonRoadmapWorkParentTitle"];
 			});
 			services.AddScoped<AzureDevOps>();
 

@@ -1,6 +1,5 @@
 ﻿using Microsoft.TeamFoundation.Work.WebApi;
 using static popilot.AzureDevOps;
-using static popilot.Statistics;
 
 namespace popilot
 {
@@ -92,14 +91,17 @@ namespace popilot
 			var worked = await azureDevOps.GetWorkItems(currentIteration, w
 				=> (w.Type == "Bug" || w.Type == "Task") 
 				&& w.State == "Closed" 
+				&& w.RootParentTitle != null
+				&& ((w.Reason != "Obsolete" && w.Reason != "Cut") || (w.CompletedWork ?? 0.0) > 0)
 				&& (w.CompletedWork != null || w.OriginalEstimate != null));
 
+			var nonRoadmapWorkParentTitle = azureDevOps.options.Value.NonRoadmapWorkParentTitle;
 			var workPerSprint = worked
 				.GroupBy(i => i.IterationPath)
 				.Select(iw => new
 				{
 					iteration = iw.Key,
-					nonRoadmapOrRoadmapWork = iw.GroupBy(i => i.RootParentTitle?.Contains("Operations/Maintenance") ?? true)
+					nonRoadmapOrRoadmapWork = iw.GroupBy(i => !string.IsNullOrWhiteSpace(nonRoadmapWorkParentTitle) ? (i.RootParentTitle?.Contains(nonRoadmapWorkParentTitle) ?? true) : false)
 				})
 				.Select(iw => new SprintWork
 				{
@@ -108,6 +110,9 @@ namespace popilot
 					RoadmapWork = iw.nonRoadmapOrRoadmapWork.SingleOrDefault(g => g.Key == false)?.Sum(i => i.CompletedWork ?? i.OriginalEstimate ?? 0.0) ?? 0.0,
 				})
 				.ToArray();
+
+			var totalWork = workPerSprint.Sum(s => s.RoadmapWork + s.NonRoadmapWork);
+			var fractionNonRoadmapWork = totalWork > 0 ? workPerSprint.Sum(s => s.NonRoadmapWork) / totalWork : 0;
 
 			return new IterationStatistics(
 				Name: currentIteration.Key,
@@ -122,6 +127,7 @@ namespace popilot
 				FractionSpilloverWorkItems: fractionSpilloverWorkItems,
 				FractionSpilloverFeatures: fractionSpilloverFeatures,
 				PreviousIterationName: previousIteration?.Key ?? string.Empty,
+				FractionNonRoadmapWork: fractionNonRoadmapWork,
 				SprintWorks: workPerSprint
 			);
 		}
@@ -139,6 +145,7 @@ namespace popilot
 			double FractionSpilloverWorkItems,
 			double FractionSpilloverFeatures,
 			string PreviousIterationName,
+			double FractionNonRoadmapWork,
 			SprintWork[] SprintWorks
 		);
 
