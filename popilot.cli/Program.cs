@@ -1,5 +1,4 @@
-﻿using Azure;
-using Azure.AI.OpenAI;
+﻿using Azure.AI.OpenAI;
 using CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,9 +9,10 @@ using OpenAI;
 using popilot;
 using Serilog;
 using System.ClientModel;
+using System.Net.Http.Headers;
 using System.Reflection;
 
-System.Console.OutputEncoding = System.Text.Encoding.UTF8;
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 var host = CreateHostBuilder().Build();
 using (var serviceScope = host.Services.CreateScope())
 {
@@ -105,6 +105,16 @@ static IHostBuilder CreateHostBuilder()
 			{
 				var authProvider = sp.GetRequiredService<GraphClientAuthProvider>();
 				return new GraphServiceClient(authProvider);
+			});
+
+			services.AddHttpClient<Zendesk>().ConfigureHttpClient(h =>
+			{
+				var zendeskSubdomain = config["ZendeskSubdomain"];
+				var zendeskEmail = config["ZendeskEmail"];
+				var zendeskApiToken = config["ZendeskApiToken"];
+				var authToken = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{zendeskEmail}/token:{zendeskApiToken}"));
+				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authToken);
+				h.BaseAddress = new Uri($"https://{zendeskSubdomain}.zendesk.com/api/");
 			});
 		});
 }
