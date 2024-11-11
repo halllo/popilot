@@ -55,8 +55,12 @@ namespace popilot.cli.Verbs
 
 					if (priority.IsEscalation)
 					{
-						var summary = NoAi ? string.Empty : await ai.Summarize(priority.WorkItems, Summarizer.ESCALATION + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
-						render.PrioSummary(summary);
+						var escalationWorkItems = priority.WorkItems.Where(w => w.State != "Closed");
+						if (escalationWorkItems.Any())
+						{
+							var summary = NoAi ? string.Empty : await ai.Summarize(escalationWorkItems, Summarizer.ESCALATION + (GenerateLanguage != null ? $" Generiere in {GenerateLanguage}." : string.Empty));
+							render.PrioSummary(summary);
+						}
 					}
 
 					//Relase or Escalaction or any other priority
@@ -193,11 +197,11 @@ namespace popilot.cli.Verbs
 						{sprints.StoryPointsInLastSprint} StoryPoints in last sprint (average is {sprints.StoryPointsPerSprint})
 						<br>			
 						{sprints.LastSprintGoalReached switch
-						{
-							true => "👍 sprint goal was achieved",
-							false => "👎 sprint goal was not achieved",
-							_ => ""
-						}}
+					{
+						true => "👍 sprint goal was achieved",
+						false => "👎 sprint goal was not achieved",
+						_ => ""
+					}}
 						<br>
 						{iteration.FractionClosedWorkItems:0%} closed WorkItems of current iteration
 						<br>
@@ -205,7 +209,7 @@ namespace popilot.cli.Verbs
 						<br>
 						{iteration.FractionClosedCommittedWorkItems:0%} closed committed WorkItems of current iteration
 						<br>
-						{iteration.FractionNonRoadmapWork:0%} non-roadmap work");
+						{iteration.FractionNonRoadmapWork:0%} non-roadmap work
 						"""
 					);
 				},
