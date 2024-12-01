@@ -59,7 +59,10 @@ namespace popilot
 		}
 
 		public record OrganizationsResponse(Organization[] Organizations, Meta Meta, Links Links);
-		public record Organization(string Url, long Id, string Name, string Details, string[] DomainNames, string[] Tags, JsonElement OrganizationFields);
+		public record Organization(string Url, long Id, string Name, string Details, string[] DomainNames, string[] Tags, JsonElement OrganizationFields)
+		{
+			public string? GetOrgField(string orgField) => OrganizationFields.GetProperty(orgField).GetString();
+		}
 		public record Meta(bool HasMore, string AfterCursor, string BeforeCursor);
 		public record Links(string Prev, string Next);
 
@@ -67,5 +70,40 @@ namespace popilot
 		{
 			public ZendeskFetchException(string message) : base(message) { }
 		}
+
+
+
+
+
+
+		public async IAsyncEnumerable<Ticket> GetTickets(long organisationId)
+		{
+			var nextPage = $"v2/organizations/{organisationId}/tickets.json";
+			while (nextPage != null)
+			{
+				var responseNextPage = await http.GetAsync(nextPage);
+				if (!responseNextPage.IsSuccessStatusCode)
+				{
+					var content = await responseNextPage.Content.ReadAsStringAsync();
+					throw new ZendeskFetchException(content);
+				}
+
+				var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<TicketsResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+
+				if (contentNextPage?.Tickets != null)
+				{
+					foreach (var ticket in contentNextPage.Tickets)
+					{
+						yield return ticket;
+					}
+				}
+
+				nextPage = contentNextPage?.NextPage;
+			}
+		}
+
+		public record TicketsResponse(Ticket[] Tickets, string? NextPage, string? PreviousPage, int Cound);
+		public record Ticket(string Url, long Id, string? ExternalId, long OrganizationId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, JsonElement Via, string Priority, string Status, string Subject, string[] Tags, string Description, CustomField[] CustomFields);
+		public record CustomField(long Id, object? Value);
 	}
 }

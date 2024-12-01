@@ -23,7 +23,7 @@ namespace popilot.cli.Verbs
 					.Where(o => SearchNames.Any(searchTerm => o.Name.Contains(searchTerm, StringComparison.InvariantCultureIgnoreCase)))
 					.ToList();
 
-				Json.Out(foundOrganizations.Select(o => new { o.Id, o.Name, }));
+				Json.Out(foundOrganizations.Select(o => new { o.Id, o.Name }));
 				logger.LogInformation("Found {Count} organizations.", foundOrganizations.Count);
 			}
 		}
