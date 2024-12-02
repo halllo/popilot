@@ -116,6 +116,13 @@ static IHostBuilder CreateHostBuilder()
 				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authToken);
 				h.BaseAddress = new Uri($"https://{zendeskSubdomain}.zendesk.com/api/");
 			});
+
+			services.AddHttpClient<Productboard>().ConfigureHttpClient(h =>
+			{
+				var authToken = config["ProductboardApiToken"];
+				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
+				h.BaseAddress = new Uri($"https://api.productboard.com/");
+			});
 		});
 }
 

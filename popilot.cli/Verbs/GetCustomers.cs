@@ -19,10 +19,12 @@ namespace popilot.cli.Verbs
 		[Option(longName: "workitemstatusnegated", Required = false)]
 		public bool WorkItemStatusFilterNegated { get; set; }
 
-		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk)
+		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard)
 		{
 			var customers = config.GetSection("Customers").Get<Customers>()!;
 			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
+
+			var companies = await productboard.GetCompanies().ToListAsync();
 
 
 			//Load report data
@@ -71,6 +73,24 @@ namespace popilot.cli.Verbs
 								(true, _) => t.State != WorkItemStatusFilter
 							})
 						: null,
+
+					notes = await companies
+						.Where(c => c.Name.Contains(customer.customerConfig.Name, StringComparison.InvariantCultureIgnoreCase))
+						.ToAsyncEnumerable()
+						.SelectAwait(async c => new
+						{
+							info = c,
+							notes = await productboard.GetNotes(c.Id)
+								.Where(n => (customers.NotesTagFilters ?? []).Any() ? n.Tags.Intersect(customers.NotesTagFilters!, InvariantCultureIgnoreCaseComparer.Instance).Any() : true)
+								.Select(n => new
+								{
+									note = n,
+									company = c,
+								})
+								.ToListAsync()
+						})
+						.SelectMany(c => c.notes.ToAsyncEnumerable())
+						.ToListAsync(),
 				});
 
 
@@ -78,6 +98,21 @@ namespace popilot.cli.Verbs
 			var html = new StringBuilder();
 			html.AppendLine("<!html>");
 			html.AppendLine("<body>");
+
+			html.AppendLine($"""
+				<span style="font-size: xx-small;">
+					OrganizationField: {customers.OrganizationField}<br>
+					TicketCustomFieldId: {customers.TicketCustomFieldId}<br>
+					TicketCustomFieldValue: {customers.TicketCustomFieldValue}<br>
+					TicketStatusFilter: {TicketStatusFilter}<br>
+					WorkItemStatusFilter: {WorkItemStatusFilter}<br>
+					WorkItemStatusFilterNegated: {WorkItemStatusFilterNegated}<br>
+					QueryProject: {customers.QueryProject}<br>
+					NotesTagFilters: {string.Join(',', customers.NotesTagFilters ?? [])}<br>
+					Generated: {DateTime.Now:F}
+				</span>
+				""");
+
 			await foreach (var loadedCustomer in loadedCustomers)
 			{
 				Console.WriteLine(loadedCustomer.customerConfig.Name);
@@ -88,6 +123,13 @@ namespace popilot.cli.Verbs
 					wi.Id,
 					wi.Title,
 					wi.State
+				}));
+				Json.Out(loadedCustomer.notes?.Select(n => new
+				{
+					company = new { n.company.Id, n.company.Name },
+					n.note.Id,
+					n.note.Title,
+					n.note.DisplayUrl,
 				}));
 
 				html.AppendLine($"<h1>{loadedCustomer.customerConfig.Name}</h1>");
@@ -122,7 +164,7 @@ namespace popilot.cli.Verbs
 						<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
 						""";
 					}));
-					html.AppendLine($"{ticketLines}<br><br>");
+					html.AppendLine($"{ticketLines}<br>");
 				}
 
 				if (loadedCustomer.workItems != null && loadedCustomer.workItems.Any())
@@ -153,11 +195,22 @@ namespace popilot.cli.Verbs
 						<span style="color:gray;">[</span>{state}<span style="color:gray;">]</span>
 						""";
 					}));
-					html.AppendLine($"{workItemLines}<br><br>");
+					html.AppendLine($"{workItemLines}<br>");
 				}
 
-				//html.AppendLine($"<h4>Insights</h4>");
-				//html.AppendLine($"coming soon<br><br>");
+				if (loadedCustomer.notes != null && loadedCustomer.notes.Any())
+				{
+					html.AppendLine($"<h4>Notes</h4>");
+					var noteLines = string.Join("<br>", (loadedCustomer.notes ?? []).Select(n =>
+					{
+						return $"""
+						<span>{Emoji.Known.LightBulb}<a href="{n.note.DisplayUrl}">{n.note.Title}</a></span>
+						<span style="color:gray;">[{n.note.State}]</span>
+						<span style="color:gray;">[{n.note.CreatedBy?.Email} {n.note.CreatedAt:d}]</span>
+						""";
+					}));
+					html.AppendLine($"{noteLines}<br>");
+				}
 			}
 			html.AppendLine("</body>");
 
@@ -165,20 +218,28 @@ namespace popilot.cli.Verbs
 			File.WriteAllText(fileName, html.ToString());
 			Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
 		}
-	}
 
-	public class Customers
-	{
-		public string OrganizationField { get; set; } = null!;
-		public long TicketCustomFieldId { get; set; }
-		public string TicketCustomFieldValue { get; set; } = null!;
-		public string? QueryProject { get; set; }
-		public Customer[] Items { get; set; } = null!;
-		public class Customer
+		private class InvariantCultureIgnoreCaseComparer : IEqualityComparer<string>
 		{
-			public string Name { get; set; } = null!;
-			public string[]? OrganizationFieldFilterValues { get; set; }
-			public Guid? QueryId { get; set; }
+			public bool Equals(string? x, string? y) => string.Equals(x, y, StringComparison.InvariantCultureIgnoreCase);
+			public int GetHashCode(string obj) => obj.GetHashCode();
+			public static IEqualityComparer<string> Instance { get; } = new InvariantCultureIgnoreCaseComparer();
+		}
+
+		private class Customers
+		{
+			public string OrganizationField { get; set; } = null!;
+			public long TicketCustomFieldId { get; set; }
+			public string TicketCustomFieldValue { get; set; } = null!;
+			public string? QueryProject { get; set; }
+			public string[]? NotesTagFilters { get; set; }
+			public Customer[] Items { get; set; } = null!;
+			public class Customer
+			{
+				public string Name { get; set; } = null!;
+				public string[]? OrganizationFieldFilterValues { get; set; }
+				public Guid? QueryId { get; set; }
+			}
 		}
 	}
 }

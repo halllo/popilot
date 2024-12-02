@@ -21,7 +21,7 @@ namespace popilot.cli.Verbs
 		[Option(longName: "status", Required = false)]
 		public string? StatusFilter { get; set; }
 
-		public async Task Do(AzureDevOps azureDevOps, ILogger<GetTickets> logger, Zendesk zendesk)
+		public async Task Do(ILogger<GetTickets> logger, Zendesk zendesk)
 		{
 			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
 
