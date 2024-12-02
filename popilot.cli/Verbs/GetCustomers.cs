@@ -1,0 +1,184 @@
+﻿using CommandLine;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Spectre.Console;
+using System.Diagnostics;
+using System.Text;
+
+namespace popilot.cli.Verbs
+{
+	[Verb("get-customers")]
+	class GetCustomers
+	{
+		[Option(longName: "ticketstatus", Required = false)]
+		public string? TicketStatusFilter { get; set; }
+
+		[Option(longName: "workitemstatus", Required = false)]
+		public string? WorkItemStatusFilter { get; set; }
+
+		[Option(longName: "workitemstatusnegated", Required = false)]
+		public bool WorkItemStatusFilterNegated { get; set; }
+
+		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk)
+		{
+			var customers = config.GetSection("Customers").Get<Customers>()!;
+			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
+
+
+			//Load report data
+			var loadedCustomers = customers.Items
+				.Select(customer => new
+				{
+					customerConfig = customer,
+					organizations = organizations.Where(o => (customer.OrganizationFieldFilterValues ?? []).Any(f => o.GetOrgField(customers.OrganizationField)?.Contains(f, StringComparison.InvariantCultureIgnoreCase) ?? false))
+				})
+				.ToAsyncEnumerable()
+				.SelectAwait(async customer => new
+				{
+					customer.customerConfig,
+
+					tickets = await customer.organizations
+						.ToAsyncEnumerable()
+						.SelectAwait(async o => new
+						{
+							o.Id,
+							o.Name,
+							Tickets = await zendesk.GetTickets(o.Id)
+								.Where(t => TicketStatusFilter != null ? t.Status == TicketStatusFilter : true)
+								.Where(t => t.CustomFields.Any(c => c.Id == customers.TicketCustomFieldId && c.Value?.ToString() == customers.TicketCustomFieldValue))
+								.SelectAwait(async t => new
+								{
+									t.Id,
+									t.Priority,
+									t.Subject,
+									t.Status,
+									t.CreatedAt,
+									t.UpdatedAt,
+									CustomFields = t.CustomFields.Where(c => c.Id == customers.TicketCustomFieldId),
+									Organization = new { o.Id, o.Name, OrganizationField = o.GetOrgField(customers.OrganizationField), Requestor = (await zendesk.GetUser(t.RequesterId))?.Email }
+								})
+								.ToListAsync(),
+						})
+						.SelectMany(o => o.Tickets.ToAsyncEnumerable())
+						.ToListAsync(),
+
+					workItems = customer.customerConfig.QueryId.HasValue
+						? (await azureDevOps.GetBacklogWorkItems(customer.customerConfig.QueryId.Value, customers.QueryProject)).Roots
+							.Where(t => (WorkItemStatusFilterNegated, WorkItemStatusFilter) switch
+							{
+								(_, null) => true,
+								(false, _) => t.State == WorkItemStatusFilter,
+								(true, _) => t.State != WorkItemStatusFilter
+							})
+						: null,
+				});
+
+
+			//Export HTML report
+			var html = new StringBuilder();
+			html.AppendLine("<!html>");
+			html.AppendLine("<body>");
+			await foreach (var loadedCustomer in loadedCustomers)
+			{
+				Console.WriteLine(loadedCustomer.customerConfig.Name);
+				Json.Out(loadedCustomer.tickets);
+				Json.Out(loadedCustomer.workItems?.Select(wi => new
+				{
+					wi.Type,
+					wi.Id,
+					wi.Title,
+					wi.State
+				}));
+
+				html.AppendLine($"<h1>{loadedCustomer.customerConfig.Name}</h1>");
+
+				if (loadedCustomer.tickets != null && loadedCustomer.tickets.Any())
+				{
+					html.AppendLine($"<h4>Tickets</h4>");
+					var ticketLines = string.Join("<br>", (loadedCustomer.tickets ?? []).Select(t =>
+					{
+						string priority = t.Priority switch
+						{
+							"urgent" => $"""<span style="color:red;">{t.Priority}</span>""",
+							"high" => $"""<span style="color:orange;">{t.Priority}</span>""",
+							"normal" => $"""<span style="color:black;">{t.Priority}</span>""",
+							"low" => $"""<span style="color:gray;">{t.Priority}</span>""",
+							_ => t.Priority,
+						};
+						string status = t.Status switch
+						{
+							"new" => $"""<span>{t.Status}</span>""",
+							"hold" => $"""<span style="color:organge;">{t.Status}</span>""",
+							"solved" => $"""<span style="color:green;">{t.Status}</span>""",
+							"closed" => $"""<span style="color:green;">{t.Status}</span>""",
+							_ => t.Status,
+						};
+
+						return $"""
+						<span>{Emoji.Known.Fire}<a href="https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}">{t.Id}</a></span>
+						<span>{t.Subject}</span>
+						<span style="color:gray;">[{priority}]</span>
+						<span style="color:gray;">[{status}]</span>
+						<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
+						""";
+					}));
+					html.AppendLine($"{ticketLines}<br><br>");
+				}
+
+				if (loadedCustomer.workItems != null && loadedCustomer.workItems.Any())
+				{
+					html.AppendLine($"<h4>Work Items</h4>");
+					var workItemLines = string.Join("<br>", (loadedCustomer.workItems ?? []).Select(w =>
+					{
+						string type = w.Type switch
+						{
+							"Epic" => Emoji.Known.Crown,
+							"Feature" => Emoji.Known.GemStone,
+							"Bug" => Emoji.Known.Collision,
+							"User Story" => Emoji.Known.PersonInTuxedo,
+							"Task" => Emoji.Known.CheckMarkButton,
+							_ => w.Type,
+						};
+						string state = w.State switch
+						{
+							"Closed" => $"""<span style="color:green;">{w.State}</span>""",
+							"Resolved" => $"""<span style="color:cyan;">{w.State}</span>""",
+							"Active" => $"""<span style="color:yellow;">{w.State}</span>""",
+							_ => $"""<span style="color:gray;">{w.State}</span>""",
+						};
+
+						return $"""
+						<span>{type}<a href="{w.UrlHumanReadable()}">{w.Id}</a></span>
+						<span>{w.Title}</span>
+						<span style="color:gray;">[</span>{state}<span style="color:gray;">]</span>
+						""";
+					}));
+					html.AppendLine($"{workItemLines}<br><br>");
+				}
+
+				//html.AppendLine($"<h4>Insights</h4>");
+				//html.AppendLine($"coming soon<br><br>");
+			}
+			html.AppendLine("</body>");
+
+			string fileName = $"customers_{DateTime.Now:yyyyMMdd-HHmmss}.html";
+			File.WriteAllText(fileName, html.ToString());
+			Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
+		}
+	}
+
+	public class Customers
+	{
+		public string OrganizationField { get; set; } = null!;
+		public long TicketCustomFieldId { get; set; }
+		public string TicketCustomFieldValue { get; set; } = null!;
+		public string? QueryProject { get; set; }
+		public Customer[] Items { get; set; } = null!;
+		public class Customer
+		{
+			public string Name { get; set; } = null!;
+			public string[]? OrganizationFieldFilterValues { get; set; }
+			public Guid? QueryId { get; set; }
+		}
+	}
+}

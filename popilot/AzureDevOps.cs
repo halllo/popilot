@@ -853,6 +853,21 @@ namespace popilot
 			}
 		}
 
+		public async Task<(IReadOnlyList<IWorkItemDto> Roots, IReadOnlyList<IWorkItemDto>? BacklogWorkItems)> GetBacklogWorkItems(Guid queryId, string? project = null)
+		{
+			var (_, tree) = await GetQueryResults(queryId, project);
+			var backlogWorkItems = tree?
+				.Dfs()
+				.Where(v =>
+					(v.Type == "Feature" && !v.ChildrenIds.Any())
+					||
+					new[] { "User Story", "Bug", "Task" }.Contains(v.Type)
+				)
+				.Where(w => w.State != "Removed")
+				.ToList();
+			return (tree.Roots().ToList(), backlogWorkItems);
+		}
+
 		public async Task<(IWorkItemDto? Root, IReadOnlyList<IWorkItemDto>? BacklogWorkItems)> GetBacklogWorkItems(QueryHierarchyItem query)
 		{
 			var (_, tree) = await GetQueryResults(query.Id);

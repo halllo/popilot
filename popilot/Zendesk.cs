@@ -103,7 +103,28 @@ namespace popilot
 		}
 
 		public record TicketsResponse(Ticket[] Tickets, string? NextPage, string? PreviousPage, int Cound);
-		public record Ticket(string Url, long Id, string? ExternalId, long OrganizationId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, JsonElement Via, string Priority, string Status, string Subject, string[] Tags, string Description, CustomField[] CustomFields);
+		public record Ticket(string Url, long Id, string? ExternalId, long OrganizationId, long RequesterId, long SubmitterId, long? AssigneeId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, JsonElement Via, string Priority, string Status, string Subject, string[] Tags, string Description, CustomField[] CustomFields);
 		public record CustomField(long Id, object? Value);
+
+
+
+
+
+
+		public async Task<User?> GetUser(long id)
+		{
+			var nextPage = $"v2/users/{id}.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var userResponse = await responseNextPage.Content.ReadFromJsonAsync<UserResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return userResponse?.User;
+		}
+		public record UserResponse(User User);
+		public record User(string Url, long Id, string Name, string Email, long OrganisationId, string Role);
 	}
 }

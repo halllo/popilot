@@ -1,6 +1,5 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Logging;
-using static popilot.Zendesk;
 
 namespace popilot.cli.Verbs
 {
@@ -19,9 +18,12 @@ namespace popilot.cli.Verbs
 		[Option(longName: "customfieldvalue", Required = true)]
 		public string? CustomFieldValue { get; set; }
 
-		public async Task Do(AzureDevOps azureDevOps, ILogger<GetOrganizations> logger, Zendesk zendesk)
+		[Option(longName: "status", Required = false)]
+		public string? StatusFilter { get; set; }
+
+		public async Task Do(AzureDevOps azureDevOps, ILogger<GetTickets> logger, Zendesk zendesk)
 		{
-			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException());
+			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
 
 			if (!FilterValues.Any())
 			{
@@ -37,10 +39,10 @@ namespace popilot.cli.Verbs
 						o.Id,
 						o.Name,
 						OrganizationField = o.GetOrgField(OrganizationField),
-						NonClosedTickets = await zendesk.GetTickets(o.Id)
-							.Where(t => t.Status != "closed")
+						Tickets = await zendesk.GetTickets(o.Id)
+							.Where(t => StatusFilter != null ? t.Status == StatusFilter : true)
 							.Where(t => t.CustomFields.Any(c => c.Id == CustomFieldId && c.Value?.ToString() == CustomFieldValue))
-							.Select(t => new
+							.SelectAwait(async t => new
 							{
 								t.Id,
 								t.Priority,
@@ -49,6 +51,7 @@ namespace popilot.cli.Verbs
 								t.CreatedAt,
 								t.UpdatedAt,
 								CustomFields = t.CustomFields.Where(c => c.Id == CustomFieldId),
+								Requestor = (await zendesk.GetUser(t.RequesterId))?.Email,
 							})
 							.ToListAsync(),
 					})
