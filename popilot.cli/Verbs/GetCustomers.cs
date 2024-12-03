@@ -4,24 +4,19 @@ using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace popilot.cli.Verbs
 {
 	[Verb("get-customers")]
 	class GetCustomers
 	{
-		[Option(longName: "ticketstatus", Required = false)]
-		public string? TicketStatusFilter { get; set; }
-
-		[Option(longName: "workitemstatus", Required = false)]
-		public string? WorkItemStatusFilter { get; set; }
-
-		[Option(longName: "workitemstatusnegated", Required = false)]
-		public bool WorkItemStatusFilterNegated { get; set; }
+		[Option(longName: "config", Required = true)]
+		public string ConfigFile { get; set; } = null!;
 
 		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard)
 		{
-			var customers = config.GetSection("Customers").Get<Customers>()!;
+			var customers = JsonSerializer.Deserialize<Customers>(File.ReadAllText(ConfigFile), new JsonSerializerOptions() { ReadCommentHandling = JsonCommentHandling.Skip });
 			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
 
 			var companies = await productboard.GetCompanies().ToListAsync();
@@ -46,7 +41,7 @@ namespace popilot.cli.Verbs
 							o.Id,
 							o.Name,
 							Tickets = await zendesk.GetTickets(o.Id)
-								.Where(t => TicketStatusFilter != null ? t.Status == TicketStatusFilter : true)
+								.Where(t => customers.TicketStatusFilter != null ? t.Status == customers.TicketStatusFilter : true)
 								.Where(t => t.CustomFields.Any(c => c.Id == customers.TicketCustomFieldId && c.Value?.ToString() == customers.TicketCustomFieldValue))
 								.SelectAwait(async t => new
 								{
@@ -66,11 +61,11 @@ namespace popilot.cli.Verbs
 
 					workItems = customer.customerConfig.QueryId.HasValue
 						? (await azureDevOps.GetBacklogWorkItems(customer.customerConfig.QueryId.Value, customers.QueryProject)).Roots
-							.Where(t => (WorkItemStatusFilterNegated, WorkItemStatusFilter) switch
+							.Where(t => (customers.WorkItemStatusFilterNegated, customers.WorkItemStatusFilter) switch
 							{
 								(_, null) => true,
-								(false, _) => t.State == WorkItemStatusFilter,
-								(true, _) => t.State != WorkItemStatusFilter
+								(false, _) => t.State == customers.WorkItemStatusFilter,
+								(true, _) => t.State != customers.WorkItemStatusFilter
 							})
 						: null,
 
@@ -104,9 +99,9 @@ namespace popilot.cli.Verbs
 					OrganizationField: {customers.OrganizationField}<br>
 					TicketCustomFieldId: {customers.TicketCustomFieldId}<br>
 					TicketCustomFieldValue: {customers.TicketCustomFieldValue}<br>
-					TicketStatusFilter: {TicketStatusFilter}<br>
-					WorkItemStatusFilter: {WorkItemStatusFilter}<br>
-					WorkItemStatusFilterNegated: {WorkItemStatusFilterNegated}<br>
+					TicketStatusFilter: {customers.TicketStatusFilter}<br>
+					WorkItemStatusFilter: {customers.WorkItemStatusFilter}<br>
+					WorkItemStatusFilterNegated: {customers.WorkItemStatusFilterNegated}<br>
 					QueryProject: {customers.QueryProject}<br>
 					NotesTagFilters: {string.Join(',', customers.NotesTagFilters ?? [])}<br>
 					Generated: {DateTime.Now:F}
@@ -228,11 +223,20 @@ namespace popilot.cli.Verbs
 
 		private class Customers
 		{
+			//Zendesk
 			public string OrganizationField { get; set; } = null!;
 			public long TicketCustomFieldId { get; set; }
 			public string TicketCustomFieldValue { get; set; } = null!;
+			public string? TicketStatusFilter { get; set; }
+
+			//AzureDevOps
+			public string? WorkItemStatusFilter { get; set; }
+			public bool WorkItemStatusFilterNegated { get; set; }
 			public string? QueryProject { get; set; }
+
+			//Productboard
 			public string[]? NotesTagFilters { get; set; }
+
 			public Customer[] Items { get; set; } = null!;
 			public class Customer
 			{
