@@ -15,8 +15,8 @@ namespace popilot.cli.Verbs
 		[Option(longName: "workItemType", HelpText = "Task, Bug, Task&Bug (default)", Required = false)]
 		public string? WorkItemType { get; set; } = "Task&Bug";
 
-		[Option(longName: "workerDetector", HelpText = "AssignedTo, ChangedBy (default)", Required = false)]
-		public CapacityAndWork.WorkerDetector WorkerDetector { get; set; } = CapacityAndWork.WorkerDetector.ChangedBy;
+		[Option(longName: "workerDetector", HelpText = "AssignedTo, ChangedBy, ChangedByAssignedTo (default)", Required = false)]
+		public CapacityAndWork.WorkerDetector WorkerDetector { get; set; } = CapacityAndWork.WorkerDetector.ChangedByAssignedTo;
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetCapacities> logger)
 		{

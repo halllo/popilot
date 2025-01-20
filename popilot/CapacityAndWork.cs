@@ -15,6 +15,7 @@ namespace popilot
 		{
 			ChangedBy,
 			AssignedTo,
+			ChangedByAssignedTo,
 		}
 
 		public async Task<SprintCapacityAndWork> OfCurrentSprint(string? project, string? team, Func<AzureDevOps.IWorkItemDto, bool> workItemFilter, WorkerDetector workerDetector)
@@ -64,6 +65,7 @@ namespace popilot
 					{
 						WorkerDetector.ChangedBy => workUpdate.ChangedBy == teamMember.TeamMember.DisplayName,
 						WorkerDetector.AssignedTo => workUpdate.WorkItem.AssignedTo == teamMember.TeamMember.DisplayName,
+						WorkerDetector.ChangedByAssignedTo => workUpdate.ChangedBy == workUpdate.WorkItem.AssignedTo && workUpdate.ChangedBy == teamMember.TeamMember.DisplayName,
 						_ => throw new ArgumentOutOfRangeException(nameof(workerDetector)),
 					};
 
