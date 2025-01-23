@@ -33,3 +33,4 @@ Other than that, there are many more commands available.
 ## Contributions
 
 I really hope you find value in popilot. Please feel free to contribute improvements via PRs.
+

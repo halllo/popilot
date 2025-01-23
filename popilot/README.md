@@ -25,3 +25,4 @@ services.AddScoped<AzureDevOps>();
 If you leave username and password `null`, popilot will attempt to acquire a user based access token via the device flow. This is perfect for CLI applications.
 
 You can now interact with Azure DevOps through method calls via your injected instance of `AzureDevOps`.
+
