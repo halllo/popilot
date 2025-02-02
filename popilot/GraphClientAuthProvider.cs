@@ -17,10 +17,13 @@ namespace popilot
 		{
 			this.logger = logger;
 
-			string tenantId = config["MicrosoftTenantId"]!;
 			string clientId = config["GraphClientId"]!;
-			string[] scopes = new[] { "https://graph.microsoft.com/.default" };
-			this.authClient = PublicClientApplicationBuilder.Create(clientId).WithDefaultRedirectUri().WithTenantId(tenantId).Build();
+			string? tenantId = config["MicrosoftTenantId"];
+			string[] scopes = ["https://graph.microsoft.com/.default"];
+			this.authClient = PublicClientApplicationBuilder.Create(clientId)
+				.WithTenantIdIfNotNullNorEmpty(tenantId)
+				.WithDefaultRedirectUri()
+				.Build();
 
 			MsalCacheHelper? cacheHelper = default;
 			this.bearerAuthProvider = new BaseBearerTokenAuthenticationProvider(new TokenProvider(async () =>

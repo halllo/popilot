@@ -78,7 +78,7 @@ static IHostBuilder CreateHostBuilder()
 			services.Configure<AzureDevOpsOptions>(o =>
 			{
 				o.BaseUrl = new Uri(config["AzureDevOps"]!);
-				o.TenantId = config["MicrosoftTenantId"]!;
+				o.TenantId = config["MicrosoftTenantId"];
 				o.ClientId = config["AzureDevOpsClientId"]!;
 				o.Username = config["AzureDevOpsUser2"];
 				o.Password = config["AzureDevOpsPassword"];

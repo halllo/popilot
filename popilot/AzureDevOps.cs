@@ -31,18 +31,19 @@ namespace popilot
 		public BuildHttpClient? buildClient;
 		public ReleaseHttpClient? releaseClient;
 
-		private static async Task<AuthenticationResult> AcquireAccessToken(string tenantId, string clientId, string? username, string? password, ILogger<AzureDevOps> logger)
+		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger)
 		{
 			const string azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
 
-			var authClient = PublicClientApplicationBuilder.Create(clientId).WithTenantId(tenantId)
-				.WithRedirectUri("http://localhost")
+			var authClient = PublicClientApplicationBuilder.Create(clientId)
+				.WithTenantIdIfNotNullNorEmpty(tenantId)
+				.WithDefaultRedirectUri()
 				.Build();
 
 			if (username != null && password != null)
 			{
 				logger.LogInformation("Login as {Username}", username);
-				var result = await authClient.AcquireTokenByUsernamePassword(new[] { azureDevOpsResource + "/.default" }, username, password).ExecuteAsync();
+				var result = await authClient.AcquireTokenByUsernamePassword([azureDevOpsResource + "/.default"], username, password).ExecuteAsync();
 				return result;
 			}
 			else
@@ -55,13 +56,13 @@ namespace popilot
 				{
 					var accounts = await authClient.GetAccountsAsync();
 					logger.LogInformation("Attempting silent login: {Accounts}", accounts);
-					var result = await authClient.AcquireTokenSilent(new[] { azureDevOpsResource + "/.default" }, accounts.FirstOrDefault()).ExecuteAsync();
+					var result = await authClient.AcquireTokenSilent([azureDevOpsResource + "/.default"], accounts.FirstOrDefault()).ExecuteAsync();
 					return result;
 				}
 				catch (Exception)
 				{
 					logger.LogInformation("Interactive login required");
-					var result = await authClient.AcquireTokenInteractive(new[] { azureDevOpsResource + "/.default" }).ExecuteAsync();
+					var result = await authClient.AcquireTokenInteractive([azureDevOpsResource + "/.default"]).ExecuteAsync();
 					return result;
 				}
 			}
@@ -108,7 +109,7 @@ namespace popilot
 			{
 				if (azureDevOpsAccessToken == null)
 				{
-					var authenticationResult = await AcquireAccessToken(this.options.Value.TenantId, this.options.Value.ClientId, this.options.Value.Username, this.options.Value.Password, this.logger);
+					var authenticationResult = await AcquireAccessToken(this.options.Value.ClientId, this.options.Value.TenantId, this.options.Value.Username, this.options.Value.Password, this.logger);
 					azureDevOpsAccessToken = authenticationResult.AccessToken;
 				}
 

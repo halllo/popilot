@@ -8,7 +8,11 @@ If you want to integrate popilot into your app, install the nuget package and ch
 
 ## Getting started using the CLI
 
-Set up a connection to Azure DevOps by providing tenant Id, client Id, and OpenAI key in the `appsettings.json`. In order to get the client Id, you have to register an application in AAD and grant it access to the Azure DevOps resource.
+Set up a connection to Azure DevOps by providing your organisation name in the `appsettings.json`. To verify connectivity, ask for a list of available projects.
+
+```bash
+popilot.cli.exe get-projects
+```
 
 You can generate a status report regarding your current sprint like this:
 
