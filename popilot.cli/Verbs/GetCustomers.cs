@@ -16,7 +16,11 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard)
 		{
-			var customers = JsonSerializer.Deserialize<Customers>(File.ReadAllText(ConfigFile), new JsonSerializerOptions() { ReadCommentHandling = JsonCommentHandling.Skip });
+			var customers = JsonSerializer.Deserialize<Customers>(File.ReadAllText(ConfigFile), new JsonSerializerOptions()
+			{
+				ReadCommentHandling = JsonCommentHandling.Skip,
+				AllowTrailingCommas = true,
+			});
 			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
 
 			var companies = await productboard.GetCompanies().ToListAsync();
