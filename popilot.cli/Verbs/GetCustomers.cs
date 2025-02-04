@@ -45,7 +45,7 @@ namespace popilot.cli.Verbs
 							o.Id,
 							o.Name,
 							Tickets = await zendesk.GetTickets(o.Id)
-								.Where(t => customers.TicketStatusFilter != null ? t.Status == customers.TicketStatusFilter : true)
+								.Where(t => (customers.TicketStatusFilters ?? []).Any() ? (customers.TicketStatusFilters ?? []).Contains(t.Status) : true)
 								.Where(t => t.CustomFields.Any(c => c.Id == customers.TicketCustomFieldId && c.Value?.ToString() == customers.TicketCustomFieldValue))
 								.SelectAwait(async t => new
 								{
@@ -61,6 +61,7 @@ namespace popilot.cli.Verbs
 								.ToListAsync(),
 						})
 						.SelectMany(o => o.Tickets.ToAsyncEnumerable())
+						.OrderByDescending(o => o.CreatedAt)
 						.ToListAsync(),
 
 					workItems = customer.customerConfig.QueryId.HasValue
@@ -103,7 +104,7 @@ namespace popilot.cli.Verbs
 					OrganizationField: {customers.OrganizationField}<br>
 					TicketCustomFieldId: {customers.TicketCustomFieldId}<br>
 					TicketCustomFieldValue: {customers.TicketCustomFieldValue}<br>
-					TicketStatusFilter: {customers.TicketStatusFilter}<br>
+					TicketStatusFilters: {string.Join(',', customers.TicketStatusFilters ?? [])}<br>
 					WorkItemStatusFilter: {customers.WorkItemStatusFilter}<br>
 					WorkItemStatusFilterNegated: {customers.WorkItemStatusFilterNegated}<br>
 					QueryProject: {customers.QueryProject}<br>
@@ -148,20 +149,20 @@ namespace popilot.cli.Verbs
 						};
 						string status = t.Status switch
 						{
-							"new" => $"""<span>{t.Status}</span>""",
-							"hold" => $"""<span style="color:organge;">{t.Status}</span>""",
 							"solved" => $"""<span style="color:green;">{t.Status}</span>""",
 							"closed" => $"""<span style="color:green;">{t.Status}</span>""",
 							_ => t.Status,
 						};
 
-						return $"""
-						<span>{Emoji.Known.Fire}<a href="https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}">{t.Id}</a></span>
-						<span>{t.Subject}</span>
-						<span style="color:gray;">[{priority}]</span>
-						<span style="color:gray;">[{status}]</span>
-						<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
+						string ticketLine = $"""
+							<span>{Emoji.Known.Fire}<a href="https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}">{t.Id}</a></span>
+							<span>{t.Subject}</span>
+							<span style="color:gray;">[{priority}]</span>
+							<span style="color:gray;">[{status}]</span>
+							<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
 						""";
+
+						return ticketLine;
 					}));
 					html.AppendLine($"{ticketLines}<br>");
 				}
@@ -231,7 +232,7 @@ namespace popilot.cli.Verbs
 			public string OrganizationField { get; set; } = null!;
 			public long TicketCustomFieldId { get; set; }
 			public string TicketCustomFieldValue { get; set; } = null!;
-			public string? TicketStatusFilter { get; set; }
+			public string[]? TicketStatusFilters { get; set; }
 
 			//AzureDevOps
 			public string? WorkItemStatusFilter { get; set; }
