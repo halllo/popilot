@@ -1,4 +1,4 @@
-# popilot
+﻿# popilot
 
 Navigating the PO experience on Azure DevOps.
 
@@ -33,6 +33,18 @@ popilot.cli.exe get-recent-deployments -p "MyProject" -t "MyTeam" -r "https://li
 ```
 
 Other than that, there are many more commands available.
+
+## Agent Mode
+
+Delegate work to popilot. Its agent mode will figure out how to combine its many operations smartly to accomplish your goal.
+
+```bash
+popilot.cli.exe agent "Create a new task for Manuel to 'Refine Backlog' in the next two sprints (after the current sprint) with 20% of his available capacity."
+```
+
+⚠️ Not all popilot operations are available in agent mode yet.
+
+⚠️ Agent mode requires Amazon Bedrock configuration in the `appsettings.json`.
 
 ## Contributions
 

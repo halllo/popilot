@@ -150,7 +150,7 @@ namespace popilot
 		}
 
 
-		public async Task<Build[]> GetBuilds(Guid projectId, string buildDefinitionName, string tagFilter = default, CancellationToken cancellationToken = default)
+		public async Task<Build[]> GetBuilds(Guid projectId, string buildDefinitionName, string? tagFilter = default, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 
@@ -955,6 +955,14 @@ namespace popilot
 			return (currentIteration, capacities);
 		}
 
+		public async Task<TeamCapacity> GetCapacities(string? project, string? team, TeamSettingsIteration iteration)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
+
+			var capacities = await this.backlogClient!.GetCapacitiesWithIdentityRefAndTotalsAsync(teamContext, iteration.Id);
+			return capacities;
+		}
 
 
 
@@ -967,6 +975,48 @@ namespace popilot
 
 
 
+		public async Task<IWorkItemDto> CreateWorkItem(string? project, string? team, TeamSettingsIteration iteration, string type, string title, IdentityRef assignee, int effort, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
+
+			var patchDocument = new JsonPatchDocument
+			{
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/System.Title",
+					Value = title,
+				},
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/System.AssignedTo",
+					Value = assignee,
+				},
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/System.IterationPath",
+					Value = iteration.Path,
+				},
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/Microsoft.VSTS.Scheduling.OriginalEstimate",
+					Value = effort,
+				},
+				new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/Microsoft.VSTS.Scheduling.RemainingWork",
+					Value = effort,
+				},
+			};
+
+			var newWorkItem = await this.workItemClient!.CreateWorkItemAsync(patchDocument, teamContext.Project, type);
+			return Map([newWorkItem]).Single();
+		}
 
 		public async Task<WorkItem> AddTag(int workItemId, string tag, CancellationToken cancellationToken)
 		{
