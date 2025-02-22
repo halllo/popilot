@@ -1,4 +1,6 @@
-﻿using Azure.AI.OpenAI;
+﻿using AgentDo;
+using Amazon.BedrockRuntime;
+using Azure.AI.OpenAI;
 using CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +33,10 @@ using (var serviceScope = host.Services.CreateScope())
 			var actionInvocationMethod = action.GetType().GetMethods().Single(m => !m.IsSpecialName && !m.IsStatic && m.DeclaringType == action.GetType());
 			try
 			{
-				var methodArguments = actionInvocationMethod.GetParameters().Select(p => serviceProvider.GetRequiredService(p.ParameterType)).ToArray();
+				var methodArguments = actionInvocationMethod.GetParameters()
+					.Select(p => serviceProvider.GetRequiredKeyedService(p.ParameterType, p.GetCustomAttribute<FromKeyedServicesAttribute>()?.Key))
+					.ToArray();
+
 				var result = actionInvocationMethod.Invoke(action, methodArguments);
 				if (result is Task t)
 				{
@@ -88,18 +93,6 @@ static IHostBuilder CreateHostBuilder()
 			});
 			services.AddScoped<AzureDevOps>();
 
-			services.AddSingleton(sp => new OpenAiService(
-				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
-					new ApiKeyCredential(config["OpenAiApiKey"]!),
-					new OpenAIClientOptions()),
-				ModelName: config["OpenAiModelName"]!));
-			services.AddSingleton(sp => new AzureOpenAiService(
-				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new AzureOpenAIClient(
-					new Uri(config["AzureOpenAiEndpoint"]!),
-					new ApiKeyCredential(config["AzureOpenAiKey"]!), new AzureOpenAIClientOptions()),
-				DeploymentName: config["AzureOpenAiDeploymentName"]!));
-			services.AddSingleton<IAi>(sp => sp.GetRequiredService<AzureOpenAiService>());
-
 			services.AddSingleton<GraphClientAuthProvider>();
 			services.AddSingleton(sp =>
 			{
@@ -123,6 +116,29 @@ static IHostBuilder CreateHostBuilder()
 				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
 				h.BaseAddress = new Uri($"https://api.productboard.com/");
 			});
+
+			services.AddSingleton(sp => new OpenAiService(
+				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(
+					new ApiKeyCredential(config["OpenAiApiKey"]!),
+					new OpenAIClientOptions()),
+				ModelName: config["OpenAiModelName"]!));
+			services.AddSingleton(sp => new AzureOpenAiService(
+				Client: string.IsNullOrWhiteSpace(config["AzureOpenAiEndpoint"]) ? null : new AzureOpenAIClient(
+					new Uri(config["AzureOpenAiEndpoint"]!),
+					new ApiKeyCredential(config["AzureOpenAiKey"]!), new AzureOpenAIClientOptions()),
+				DeploymentName: config["AzureOpenAiDeploymentName"]!));
+			services.AddSingleton<IAi>(sp => sp.GetRequiredService<AzureOpenAiService>());
+
+			if (!string.IsNullOrWhiteSpace(config["AWSBedrockAccessKeyId"]))
+			{
+				services.AddSingleton<IAmazonBedrockRuntime>(sp => new AmazonBedrockRuntimeClient(
+					awsAccessKeyId: config["AWSBedrockAccessKeyId"]!,
+					awsSecretAccessKey: config["AWSBedrockSecretAccessKey"]!,
+					region: Amazon.RegionEndpoint.GetBySystemName(config["AWSBedrockRegion"]!)));
+
+				services.AddKeyedSingleton<IAgent, BedrockAgent>("bedrock");
+				services.Configure<BedrockAgentOptions>(o => o.ModelId = "anthropic.claude-3-5-sonnet-20240620-v1:0");
+			}
 		});
 }
 

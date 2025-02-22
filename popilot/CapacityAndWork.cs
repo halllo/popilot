@@ -1,4 +1,4 @@
-﻿using QuickGraph;
+﻿using Microsoft.TeamFoundation.Work.WebApi;
 
 namespace popilot
 {
@@ -20,15 +20,21 @@ namespace popilot
 
 		public async Task<SprintCapacityAndWork> OfCurrentSprint(string? project, string? team, Func<AzureDevOps.IWorkItemDto, bool> workItemFilter, WorkerDetector workerDetector)
 		{
-			var (currentIteration, capacities) = await azureDevOps.GetCapacities(project, team);
+			var currentIteration = await azureDevOps.GetCurrentIteration(project, team);
+			return await OfSprint(project, team, currentIteration, workItemFilter, workerDetector);
+		}
+
+		public async Task<SprintCapacityAndWork> OfSprint(string? project, string? team, TeamSettingsIteration iteration, Func<AzureDevOps.IWorkItemDto, bool> workItemFilter, WorkerDetector workerDetector)
+		{
+			var capacities = await azureDevOps.GetCapacities(project, team, iteration);
 
 			var sprintDays = EnumerableEx
-				.Generate(currentIteration.Attributes.StartDate!.Value, i => i != currentIteration.Attributes.FinishDate!.Value.AddDays(1), i => i.AddDays(1), i => i)
+				.Generate(iteration.Attributes.StartDate!.Value, i => i != iteration.Attributes.FinishDate!.Value.AddDays(1), i => i.AddDays(1), i => i)
 				.Where(i => new[] { DayOfWeek.Saturday, DayOfWeek.Sunday }.Contains(i.DayOfWeek) == false);
 
 			var sprintDaysBeforeToday = sprintDays.TakeWhile(d => d < DateTime.Today.Date);
 
-			var workItems = await azureDevOps.GetWorkItems(currentIteration);
+			var workItems = await azureDevOps.GetWorkItems(iteration);
 			var workUpdates = await workItems
 				.Where(workItemFilter)
 				.ToAsyncEnumerable()
@@ -104,6 +110,7 @@ namespace popilot
 					return new SprintCapacityAndWork.TeamMember
 					{
 						DisplayName = teamMemberDisplayName,
+						TotalCapacity = capacityOfTeamMember(sprintDays).Sum(),
 						CapacityUntilToday = capacityOfTeamMember(sprintDaysBeforeToday).Sum(),
 						CompletedWorkDeltaUntilToday = completedWorkDelta(sprintDaysBeforeToday).Sum(),
 						RemainingWorkDeltaUntilToday = remainingWorkDelta(sprintDaysBeforeToday).Sum(),
@@ -114,10 +121,10 @@ namespace popilot
 
 			return new SprintCapacityAndWork
 			{
-				Start = currentIteration.Attributes.StartDate!.Value,
-				End = currentIteration.Attributes.FinishDate!.Value,
+				Start = iteration.Attributes.StartDate!.Value,
+				End = iteration.Attributes.FinishDate!.Value,
 				Days = sprintDays.ToArray(),
-				Path = currentIteration.Path,
+				Path = iteration.Path,
 				TeamMembers = teamMembers,
 			};
 		}
@@ -142,6 +149,7 @@ namespace popilot
 			public class TeamMember
 			{
 				public string DisplayName { get; internal set; } = null!;
+				public double? TotalCapacity { get; internal set; }
 				public double? CapacityUntilToday { get; internal set; }
 				public double? CompletedWorkDeltaUntilToday { get; internal set; }
 				public double? RemainingWorkDeltaUntilToday { get; internal set; }

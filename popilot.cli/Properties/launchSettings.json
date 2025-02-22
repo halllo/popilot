@@ -2,7 +2,9 @@
   "profiles": {
 		"popilot": {
 			"commandName": "Project",
-			"commandLineArgs": "get-velocity"
+			//"commandLineArgs": "get-sprints",
+			"commandLineArgs": "agent \"Create a new task for Manuel to 'Refine Backlog' in the next two sprints (after the current sprint) with 20% of his available capacity.\"",
+			//"commandLineArgs": "create-workitem --task --sprint \"Iteration 2\" --assignee \"Manuel\" --effort 5 \"Backlog Refinement\""
 		}
   }
 }
