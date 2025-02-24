@@ -32,8 +32,8 @@ namespace popilot.cli.Verbs
 			var sprints = await azureDevOps.GetIterations(Project, Team);
 			var selectedSprint = sprints.Single(s => s.Path.Contains(Sprint, StringComparison.InvariantCultureIgnoreCase));
 
-			var teamMembers = await azureDevOps.GetCapacities(Project, Team);
-			var selectedTeamMember = teamMembers.Item2.TeamMembers.Single(m => m.TeamMember.DisplayName.Contains(Assignee, StringComparison.InvariantCultureIgnoreCase));
+			var (capacities, daysOff) = await azureDevOps.GetCapacities(Project, Team, selectedSprint);
+			var selectedTeamMember = capacities.TeamMembers.Single(m => m.TeamMember.DisplayName.Contains(Assignee, StringComparison.InvariantCultureIgnoreCase));
 
 			var newWorkItem = await azureDevOps.CreateWorkItem(
 				project: Project, 
@@ -42,7 +42,8 @@ namespace popilot.cli.Verbs
 				type: "Task", 
 				title: Title, 
 				assignee: selectedTeamMember.TeamMember, 
-				effort: Effort);
+				effort: Effort,
+				parent: null);
 			
 			AnsiConsole.Write(ColoredConsole.Display2(newWorkItem));
 			AnsiConsole.WriteLine();

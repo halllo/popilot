@@ -22,11 +22,11 @@
 	<ItemGroup>
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
 		<PackageReference Include="Azure.Identity" Version="1.13.2" />
-		<PackageReference Include="Microsoft.Graph" Version="5.68.0" />
-		<PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.67.2" />
+		<PackageReference Include="Microsoft.Graph" Version="5.70.0" />
+		<PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.68.0" />
 		<PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="19.225.1" />
 		<PackageReference Include="Microsoft.VisualStudio.Services.InteractiveClient" Version="19.225.1" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
 		<PackageReference Include="Microsoft.VisualStudio.Services.Release.Client" Version="19.225.1" />
 		<PackageReference Include="NodaTime" Version="3.2.1" />
 		<PackageReference Include="Sandwych.QuickGraph.Core" Version="1.0.0" />

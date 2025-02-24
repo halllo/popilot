@@ -603,36 +603,17 @@ namespace popilot
 		}
 
 
-		public async Task<List<TeamSettingsIteration>> GetIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<TeamSettingsIteration>> GetIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 			var iterations = await this.backlogClient!.GetTeamIterationsAsync(new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam), cancellationToken: cancellationToken);
 			return iterations;
 		}
 
-		public async Task<List<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
-			await this.Init();
-
-			var root = await this.workItemClient!.GetClassificationNodeAsync(
-				project: project ?? options.Value.DefaultProject,
-				structureGroup: TreeStructureGroup.Iterations,
-				depth: 2);
-
-			var teamIterationPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim();
-			bool hasTeamPath = root.Children.Any(c => string.Equals(c.Name, teamIterationPathName, StringComparison.InvariantCultureIgnoreCase));
-			if (hasTeamPath)
-			{
-				root = await this.workItemClient!.GetClassificationNodeAsync(
-					project: project ?? options.Value.DefaultProject,
-					structureGroup: TreeStructureGroup.Iterations,
-					path: teamIterationPathName,
-					depth: 2);
-			}
-
-			var sprints = EnumerableExtensions
-				.Tree([root], parent => parent.Children)
-				.Dfs(root)
+			var allIterations = await GetAllClassificationNodesFlat(TreeStructureGroup.Iterations, project, team, cancellationToken);
+			var iterations = allIterations
 				.Where(s => s.HasChildren == false)
 				.Select(s => new TeamSettingsIteration
 				{
@@ -657,7 +638,55 @@ namespace popilot
 				.OrderBy(s => s.Attributes.FinishDate)
 				.ToList();
 
-			return sprints;
+			return iterations;
+		}
+
+		public async Task<IReadOnlyList<string>> GetAllAreas(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
+			var areas = await GetAllClassificationNodesFlat(TreeStructureGroup.Areas, project, team);
+			var areaPaths = areas
+				.Select(a => a.Path.Replace("\\Area\\", "\\", StringComparison.InvariantCultureIgnoreCase).TrimStart('\\'))
+				.ToList();
+
+			return areaPaths;
+		}
+
+		public async Task<IEnumerable<WorkItemClassificationNode>> GetAllClassificationNodesFlat(TreeStructureGroup treeStructureGroup, string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+
+			var root = await this.workItemClient!.GetClassificationNodeAsync(
+				project: project ?? options.Value.DefaultProject,
+				structureGroup: treeStructureGroup,
+				depth: 2);
+
+			var teamAreaPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim();
+			bool hasTeamPath = root.Children.Any(c => string.Equals(c.Name, teamAreaPathName, StringComparison.InvariantCultureIgnoreCase));
+			if (hasTeamPath)
+			{
+				root = await this.workItemClient!.GetClassificationNodeAsync(
+					project: project ?? options.Value.DefaultProject,
+					structureGroup: treeStructureGroup,
+					path: teamAreaPathName,
+					depth: 2);
+			}
+
+			var teamAreaPathNameSpaceless = teamAreaPathName.Replace(" ", string.Empty);
+			bool hasTeamPathSpaceless = root.Children.Any(c => string.Equals(c.Name, teamAreaPathNameSpaceless, StringComparison.InvariantCultureIgnoreCase));
+			if (hasTeamPathSpaceless)
+			{
+				root = await this.workItemClient!.GetClassificationNodeAsync(
+					project: project ?? options.Value.DefaultProject,
+					structureGroup: treeStructureGroup,
+					path: teamAreaPathNameSpaceless,
+					depth: 2);
+			}
+
+			var classificationNodes = EnumerableExtensions
+				.Tree([root], parent => parent.Children)
+				.Dfs(root);
+
+			return classificationNodes;
 		}
 
 		public async Task<TeamSettingsIteration> GetCurrentIteration(string? project = null, string? team = null, CancellationToken cancellationToken = default)
@@ -944,24 +973,14 @@ namespace popilot
 
 
 
-		public async Task<(TeamSettingsIteration, TeamCapacity)> GetCapacities(string? project, string? team)
-		{
-			await this.Init();
-			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
-
-			var iterations = await this.backlogClient!.GetTeamIterationsAsync(teamContext);
-			var currentIteration = iterations.Where(i => i.Attributes.TimeFrame == TimeFrame.Current).Single();
-			var capacities = await this.backlogClient!.GetCapacitiesWithIdentityRefAndTotalsAsync(teamContext, currentIteration.Id);
-			return (currentIteration, capacities);
-		}
-
-		public async Task<TeamCapacity> GetCapacities(string? project, string? team, TeamSettingsIteration iteration)
+		public async Task<(TeamCapacity teamCapacity, TeamSettingsDaysOff teamDaysOff)> GetCapacities(string? project, string? team, TeamSettingsIteration iteration)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
 
 			var capacities = await this.backlogClient!.GetCapacitiesWithIdentityRefAndTotalsAsync(teamContext, iteration.Id);
-			return capacities;
+			var teamDaysOff = await this.backlogClient!.GetTeamDaysOffAsync(teamContext, iteration.Id);
+			return (capacities, teamDaysOff);
 		}
 
 
@@ -975,10 +994,19 @@ namespace popilot
 
 
 
-		public async Task<IWorkItemDto> CreateWorkItem(string? project, string? team, TeamSettingsIteration iteration, string type, string title, IdentityRef assignee, int effort, CancellationToken cancellationToken = default)
+		public async Task<IWorkItemDto> CreateWorkItem(string? project, string? team,
+			TeamSettingsIteration iteration,
+			string type,
+			string title,
+			IdentityRef? assignee,
+			decimal? effort,
+			int? parent,
+			CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? options.Value.DefaultProject, team ?? options.Value.DefaultTeam);
+			var areaPath = (await GetAllAreas(teamContext.Project, teamContext.Team))
+				.First();//there is no API to get the default area path of a team, so we assume it is the first.
 
 			var patchDocument = new JsonPatchDocument
 			{
@@ -991,8 +1019,8 @@ namespace popilot
 				new JsonPatchOperation()
 				{
 					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
-					Path = "/fields/System.AssignedTo",
-					Value = assignee,
+					Path = "/fields/System.AreaPath",
+					Value = areaPath,
 				},
 				new JsonPatchOperation()
 				{
@@ -1000,19 +1028,49 @@ namespace popilot
 					Path = "/fields/System.IterationPath",
 					Value = iteration.Path,
 				},
-				new JsonPatchOperation()
+			};
+
+			if (assignee != null)
+			{
+				patchDocument.Add(new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/fields/System.AssignedTo",
+					Value = assignee,
+				});
+			}
+
+			if (effort.HasValue)
+			{
+				patchDocument.Add(new JsonPatchOperation()
 				{
 					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
 					Path = "/fields/Microsoft.VSTS.Scheduling.OriginalEstimate",
-					Value = effort,
-				},
-				new JsonPatchOperation()
+					Value = effort.Value,
+				});
+				patchDocument.Add(new JsonPatchOperation()
 				{
 					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
 					Path = "/fields/Microsoft.VSTS.Scheduling.RemainingWork",
-					Value = effort,
-				},
-			};
+					Value = effort.Value,
+				});
+			}
+
+			if (parent.HasValue)
+			{
+				var parentWorkItem = (await this.GetWorkItems([parent.Value], cancellationToken)).Single();
+				patchDocument.Add(new JsonPatchOperation()
+				{
+					Operation = Microsoft.VisualStudio.Services.WebApi.Patch.Operation.Add,
+					Path = "/relations/-",
+					Value = new WorkItemRelation
+					{
+						Attributes = new Dictionary<string, object> { { "name", "Parent" } },
+						Rel = "System.LinkTypes.Hierarchy-Reverse",
+						Url = parentWorkItem.Url,
+					},
+				});
+			}
 
 			var newWorkItem = await this.workItemClient!.CreateWorkItemAsync(patchDocument, teamContext.Project, type);
 			return Map([newWorkItem]).Single();

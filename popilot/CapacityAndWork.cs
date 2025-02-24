@@ -26,7 +26,7 @@ namespace popilot
 
 		public async Task<SprintCapacityAndWork> OfSprint(string? project, string? team, TeamSettingsIteration iteration, Func<AzureDevOps.IWorkItemDto, bool> workItemFilter, WorkerDetector workerDetector)
 		{
-			var capacities = await azureDevOps.GetCapacities(project, team, iteration);
+			var (capacities, teamDaysOff) = await azureDevOps.GetCapacities(project, team, iteration);
 
 			var sprintDays = EnumerableEx
 				.Generate(iteration.Attributes.StartDate!.Value, i => i != iteration.Attributes.FinishDate!.Value.AddDays(1), i => i.AddDays(1), i => i)
@@ -64,7 +64,7 @@ namespace popilot
 					var teamMemberDisplayName = teamMember.TeamMember.DisplayName;
 
 					double?[] capacityOfTeamMember(IEnumerable<DateTime> days) => days
-						.Select(sprintDay => teamMember.DaysOff.Contains(sprintDay) ? default(double?) : teamMember.Activities.Sum(a => a.CapacityPerDay))
+						.Select(sprintDay => teamMember.DaysOff.Contains(sprintDay) || teamDaysOff.DaysOff.Contains(sprintDay) ? default(double?) : teamMember.Activities.Sum(a => a.CapacityPerDay))
 						.ToArray();
 
 					bool workUpdateFilter(WorkUpdate workUpdate) => workerDetector switch
