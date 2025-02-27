@@ -31,7 +31,7 @@ namespace popilot
 		public BuildHttpClient? buildClient;
 		public ReleaseHttpClient? releaseClient;
 
-		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger)
+		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger, bool logAccount = true)
 		{
 			const string azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
 
@@ -42,7 +42,7 @@ namespace popilot
 
 			if (username != null && password != null)
 			{
-				logger.LogInformation("Login as {Username}", username);
+				if (logAccount) logger.LogInformation("Login as {Username}", username);
 				var result = await authClient.AcquireTokenByUsernamePassword([azureDevOpsResource + "/.default"], username, password).ExecuteAsync();
 				return result;
 			}
@@ -55,13 +55,13 @@ namespace popilot
 				try
 				{
 					var accounts = await authClient.GetAccountsAsync();
-					logger.LogInformation("Attempting silent login: {Accounts}", accounts);
+					if (logAccount) logger.LogInformation("Attempting silent login: {Accounts}", accounts);
 					var result = await authClient.AcquireTokenSilent([azureDevOpsResource + "/.default"], accounts.FirstOrDefault()).ExecuteAsync();
 					return result;
 				}
 				catch (Exception)
 				{
-					logger.LogInformation("Interactive login required");
+					if (logAccount) logger.LogInformation("Interactive login required");
 					var result = await authClient.AcquireTokenInteractive([azureDevOpsResource + "/.default"]).ExecuteAsync();
 					return result;
 				}
@@ -109,7 +109,7 @@ namespace popilot
 			{
 				if (azureDevOpsAccessToken == null)
 				{
-					var authenticationResult = await AcquireAccessToken(this.options.Value.ClientId, this.options.Value.TenantId, this.options.Value.Username, this.options.Value.Password, this.logger);
+					var authenticationResult = await AcquireAccessToken(this.options.Value.ClientId, this.options.Value.TenantId, this.options.Value.Username, this.options.Value.Password, this.logger, !this.options.Value.DontLogAccount);
 					azureDevOpsAccessToken = authenticationResult.AccessToken;
 				}
 
