@@ -26,9 +26,9 @@ namespace popilot
 			return new HierarchicalReleaseNotesWorkItems(root, releaseNotess);
 		}
 
-		public async Task<IReleaseNotesWorkItems> OfRecentClosings(string? project, string? team, int? take = null, CancellationToken cancellationToken = default)
+		public async Task<IReleaseNotesWorkItems> OfRecentClosings(string? project, string? team, string? iterationPath = null, Regex? iterationPathFilter = null, int? take = null, CancellationToken cancellationToken = default)
 		{
-			var filteredIterationReferences = (await azureDevOps.GetAllIterations(project, team, cancellationToken))
+			var filteredIterationReferences = (await azureDevOps.GetAllIterations(project, team, iterationPath, iterationPathFilter, cancellationToken))
 				.Where(i => i.Attributes.TimeFrame == TimeFrame.Current || i.Attributes.TimeFrame == TimeFrame.Past)
 				.TakeLast(take ?? 10);
 
@@ -36,16 +36,15 @@ namespace popilot
 
 			var closingDays = iterations
 				.Reverse()
-				.Select(i => i.WorkItems
-					.GroupBy(w => (DateOnly?)(w.ClosedDate.HasValue ? DateOnly.FromDateTime(w.ClosedDate.Value) : null))
-					.OrderByDescending(d => d.Key)
-				)
-				.SelectMany(i => i.Select(g => new WorkItemsGroup
+				.SelectMany(i => i.WorkItems)
+				.GroupBy(w => (DateOnly?)(w.ClosedDate.HasValue ? DateOnly.FromDateTime(w.ClosedDate.Value) : null))
+				.OrderByDescending(d => d.Key)
+				.Select(g => new WorkItemsGroup
 				(
 					GroupName: $"{g.Key:dd.MM.yyyy}",
 					WorkItems: g.Where(w => w.Tags.Contains("_ReleaseNotes") || w.Tags.Contains("ReleaseNotes")).ToList()
-				)))
-				.Where(i => i.WorkItems.Any())
+				))
+				.Where(g => g.WorkItems.Any())
 				.ToList();
 
 			return new GroupedReleaseNotesWorkItems(closingDays);

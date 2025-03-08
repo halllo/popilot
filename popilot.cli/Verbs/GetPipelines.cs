@@ -132,6 +132,7 @@ namespace popilot.cli.Verbs
 			var table = new Table().Expand();
 			table.AddColumn("#");
 			table.AddColumn("Name");
+			table.AddColumn("FinishTime");
 			table.AddColumn("Status");
 			table.ShowRowSeparators = true;
 
@@ -145,6 +146,7 @@ namespace popilot.cli.Verbs
 				table.AddRow(
 					new Markup($"[gray]{record.RecordType}[/]"),
 					new Markup($"{record.Name}"),
+					new Markup($"{record.FinishTime}"),
 					new Markup(record switch
 					{
 						{ State: TimelineRecordState.Completed, Result: TaskResult.Succeeded } => $"[green]Succeeded[/]",

@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
+using System.Text.RegularExpressions;
 using static ColoredConsole;
 
 namespace popilot.cli.Verbs
@@ -33,9 +34,15 @@ namespace popilot.cli.Verbs
 		[Option('t', longName: "team", Required = false)]
 		public string? Team { get; set; }
 
+		[Option(longName: "path", Required = false)]
+		public string? Path { get; set; }
+
+		[Option(longName: "path-filter", Required = false)]
+		public Regex? PathFilter { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetAllSprints> logger)
 		{
-			var sprints = await azureDevOps.GetAllIterations(Project, Team);
+			var sprints = await azureDevOps.GetAllIterations(Project, Team, Path, PathFilter);
 
 			foreach (var sprint in sprints)
 			{

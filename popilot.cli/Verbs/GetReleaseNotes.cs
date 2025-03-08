@@ -38,6 +38,12 @@ namespace popilot.cli.Verbs
 		[Option(longName: "take", Required = false, HelpText = "take sprints (only used if no Id is provided; default 10)")]
 		public int? TakeSprints { get; set; }
 
+		[Option(longName: "iteration-path", Required = false, HelpText = "Iteration path. If not provided, we find it by convention.")]
+		public string? IterationPath { get; set; }
+
+		[Option(longName: "iteration-path-filter", Required = false)]
+		public Regex? IterationPathFilter { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetReleaseNotes> logger)
 		{
 			var releaseNotesReader = new ReleaseNotes(azureDevOps);
@@ -60,7 +66,7 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var releaseNotes = await releaseNotesReader.OfRecentClosings(Project, Team, take: TakeSprints);
+				var releaseNotes = await releaseNotesReader.OfRecentClosings(Project, Team, IterationPath, IterationPathFilter, take: TakeSprints);
 
 				if (string.Equals(Output, "html", StringComparison.InvariantCultureIgnoreCase))
 				{

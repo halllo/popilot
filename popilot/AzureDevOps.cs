@@ -17,6 +17,7 @@ using QuickGraph;
 using QuickGraph.Algorithms;
 using QuickGraph.Algorithms.Observers;
 using QuickGraph.Algorithms.Search;
+using System.Text.RegularExpressions;
 
 namespace popilot
 {
@@ -610,24 +611,24 @@ namespace popilot
 			return iterations;
 		}
 
-		public async Task<IReadOnlyList<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<TeamSettingsIteration>> GetAllIterations(string? project = null, string? team = null, string? path = null, Regex? pathFilter = null, CancellationToken cancellationToken = default)
 		{
-			var allIterations = await GetAllClassificationNodesFlat(TreeStructureGroup.Iterations, project, team, cancellationToken);
+			var allIterations = await GetAllClassificationNodesFlat(TreeStructureGroup.Iterations, project, team, path, pathFilter, cancellationToken);
 			var iterations = allIterations
 				.Where(s => s.HasChildren == false)
 				.Select(s => new TeamSettingsIteration
 				{
 					Attributes = new TeamIterationAttributes
 					{
-						TimeFrame = ((DateTime)s.Attributes["startDate"], (DateTime)s.Attributes["finishDate"]) switch
+						TimeFrame = s.Attributes == null ? null : ((DateTime)s.Attributes["startDate"], (DateTime)s.Attributes["finishDate"]) switch
 						{
 							(DateTime start, DateTime end) when end < DateTime.Now => TimeFrame.Past,
 							(DateTime start, DateTime end) when start < DateTime.Now && DateTime.Now < end => TimeFrame.Current,
 							(DateTime start, DateTime end) when DateTime.Now < start => TimeFrame.Future,
 							_ => null,
 						},
-						StartDate = (DateTime)s.Attributes["startDate"],
-						FinishDate = (DateTime)s.Attributes["finishDate"],
+						StartDate = s.Attributes == null ? null : (DateTime)s.Attributes["startDate"],
+						FinishDate = s.Attributes == null ? null : (DateTime)s.Attributes["finishDate"],
 					},
 					Id = Guid.Empty,
 					Name = s.Name,
@@ -643,7 +644,7 @@ namespace popilot
 
 		public async Task<IReadOnlyList<string>> GetAllAreas(string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
-			var areas = await GetAllClassificationNodesFlat(TreeStructureGroup.Areas, project, team);
+			var areas = await GetAllClassificationNodesFlat(TreeStructureGroup.Areas, project, team, cancellationToken: cancellationToken);
 			var areaPaths = areas
 				.Select(a => a.Path.Replace("\\Area\\", "\\", StringComparison.InvariantCultureIgnoreCase).TrimStart('\\'))
 				.ToList();
@@ -651,39 +652,59 @@ namespace popilot
 			return areaPaths;
 		}
 
-		public async Task<IEnumerable<WorkItemClassificationNode>> GetAllClassificationNodesFlat(TreeStructureGroup treeStructureGroup, string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		/// <summary>
+		/// Provide either project and team or project and path. When providing team, the team name is used to find the path based on conventions.
+		/// </summary>
+		public async Task<IEnumerable<WorkItemClassificationNode>> GetAllClassificationNodesFlat(TreeStructureGroup treeStructureGroup, string? project = null, string? team = null, string? path = null, Regex? pathFilter = null, CancellationToken cancellationToken = default)
 		{
 			await this.Init();
 
-			var root = await this.workItemClient!.GetClassificationNodeAsync(
-				project: project ?? options.Value.DefaultProject,
-				structureGroup: treeStructureGroup,
-				depth: 2);
+			WorkItemClassificationNode root;
 
-			var teamAreaPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim();
-			bool hasTeamPath = root.Children.Any(c => string.Equals(c.Name, teamAreaPathName, StringComparison.InvariantCultureIgnoreCase));
-			if (hasTeamPath)
+			if (path != null)
 			{
 				root = await this.workItemClient!.GetClassificationNodeAsync(
 					project: project ?? options.Value.DefaultProject,
 					structureGroup: treeStructureGroup,
-					path: teamAreaPathName,
-					depth: 2);
+					path: path,
+					depth: 3);
 			}
-
-			var teamAreaPathNameSpaceless = teamAreaPathName.Replace(" ", string.Empty);
-			bool hasTeamPathSpaceless = root.Children.Any(c => string.Equals(c.Name, teamAreaPathNameSpaceless, StringComparison.InvariantCultureIgnoreCase));
-			if (hasTeamPathSpaceless)
+			else if (team != null)
 			{
 				root = await this.workItemClient!.GetClassificationNodeAsync(
 					project: project ?? options.Value.DefaultProject,
 					structureGroup: treeStructureGroup,
-					path: teamAreaPathNameSpaceless,
 					depth: 2);
+
+				var teamAreaPathName = (team ?? options.Value.DefaultTeam ?? "").Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim();
+				bool hasTeamPath = root.HasChildren != false && root.Children.Any(c => string.Equals(c.Name, teamAreaPathName, StringComparison.InvariantCultureIgnoreCase));
+				if (hasTeamPath)
+				{
+					root = await this.workItemClient!.GetClassificationNodeAsync(
+						project: project ?? options.Value.DefaultProject,
+						structureGroup: treeStructureGroup,
+						path: teamAreaPathName,
+						depth: 2);
+				}
+
+				var teamAreaPathNameSpaceless = teamAreaPathName.Replace(" ", string.Empty);
+				bool hasTeamPathSpaceless = root.HasChildren != false && root.Children.Any(c => string.Equals(c.Name, teamAreaPathNameSpaceless, StringComparison.InvariantCultureIgnoreCase));
+				if (hasTeamPathSpaceless)
+				{
+					root = await this.workItemClient!.GetClassificationNodeAsync(
+						project: project ?? options.Value.DefaultProject,
+						structureGroup: treeStructureGroup,
+						path: teamAreaPathNameSpaceless,
+						depth: 2);
+				}
+			}
+			else
+			{
+				throw new ArgumentException("Required either 'team' or 'path'.");
 			}
 
 			var classificationNodes = EnumerableExtensions
-				.Tree([root], parent => parent.Children)
+				.Tree([root], parent => parent.Children?.WhereIf(pathFilter != null, p => pathFilter!.IsMatch(p.Path[root.Path.Length..].Trim('\\'))))
 				.Dfs(root);
 
 			return classificationNodes;
