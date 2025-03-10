@@ -46,7 +46,14 @@ namespace popilot.cli.Verbs
 		private async Task Generate(AzureDevOps azureDevOps, IConfiguration config, IAi ai, Renderer render)
 		{
 			var priorityOrder = (config.GetSection("PriorityOrder").Get<string[]>()?.Reverse() ?? Array.Empty<string>()).ToList();
-			var priorities = await azureDevOps.GetPriorities(Project, Team, priorityOrder);
+			var priorities = Team != null
+				? await Team
+					.Split(',', StringSplitOptions.RemoveEmptyEntries)
+					.ToAsyncEnumerable()
+					.SelectManyAwait(async t => (await azureDevOps.GetPriorities(Project, t, priorityOrder)).ToAsyncEnumerable())
+					.ToListAsync()
+				: [.. await azureDevOps.GetPriorities(Project, Team, priorityOrder)];
+
 			foreach (var priority in priorities)
 			{
 				if (priority.WorkItems != null)
@@ -64,10 +71,16 @@ namespace popilot.cli.Verbs
 					}
 
 					//Relase or Escalaction or any other priority
-					var currentSprint = await azureDevOps.GetCurrentIteration(Project, Team);
+					var currentSprints = Team != null
+						? await Team
+							.Split(',', StringSplitOptions.RemoveEmptyEntries)
+							.ToAsyncEnumerable()
+							.SelectAwait(async t => await azureDevOps.GetCurrentIteration(Project, t))
+							.ToListAsync()
+						: [await azureDevOps.GetCurrentIteration(Project, Team)];
 					{
 						var currentSprintWorkItems = priority.WorkItems
-							.Where(w => w.IterationPath == currentSprint.Path)
+							.Where(w => currentSprints.Any(s => s.Path == w.IterationPath))
 							.ToList();
 						if (currentSprintWorkItems.Any())
 						{
@@ -83,6 +96,9 @@ namespace popilot.cli.Verbs
 
 					if (priority.IsEscalation)
 					{
+						if (currentSprints.Count > 1) throw new NotSupportedException("Multi team prios dont support escalation reports yet.");
+
+						var currentSprint = currentSprints.Single();
 						var multiSprintIteration = string.Join('\\', currentSprint.Path.Split('\\').Reverse().Skip(1).Reverse());
 						var inIterationButNotSprint = priority.WorkItems.Where(w => w.IterationPath != currentSprint.Path && w.IterationPath.StartsWith(multiSprintIteration)).ToList();
 						if (inIterationButNotSprint.Any())
@@ -94,10 +110,14 @@ namespace popilot.cli.Verbs
 				}
 			}
 
-			var iterations = await azureDevOps.GetPastIterationsWithCompletedWorkItems(Project, Team, take: 10);
-			var sprintStats = iterations.GetSprintStatistics();
-			var iterationStats = await azureDevOps.GetIterationStatistics(Project, Team);
-			render.Statistics(sprintStats, iterationStats);
+			var teams = Team != null ? Team.Split(',', StringSplitOptions.RemoveEmptyEntries) : (string?[])[null];
+			foreach (var t in teams)
+			{
+				var iterations = await azureDevOps.GetPastIterationsWithCompletedWorkItems(Project, t, take: 10);
+				var sprintStats = iterations.GetSprintStatistics();
+				var iterationStats = await azureDevOps.GetIterationStatistics(Project, t);
+				render.Statistics(sprintStats, iterationStats, teams.Length > 1 ? $"{t} Statistics" : null);
+			}
 			render.End();
 		}
 	}
@@ -116,7 +136,7 @@ namespace popilot.cli.Verbs
 		public delegate void _PrioSummary(string summary);
 		public delegate void _PrioWorkItems(IEnumerable<IWorkItemDto> workItems);
 		public delegate void _PrioSprintEmpty();
-		public delegate void _Statistics(Statistics.SprintStatistics sprints, Statistics.IterationStatistics iteration);
+		public delegate void _Statistics(Statistics.SprintStatistics sprints, Statistics.IterationStatistics iteration, string? heading = null);
 		public delegate void _End();
 
 		public static (Renderer, StringBuilder) Html()
@@ -187,30 +207,31 @@ namespace popilot.cli.Verbs
 				{
 					html.AppendLine($"""In this sprint we work on different topics.<br><br>""");
 				},
-				Statistics: (sprints, iteration) =>
+				Statistics: (sprints, iteration, heading) =>
 				{
 					html.AppendLine($"""
-						<b>Statistics</b>
-						<br>
-						{sprints.ItemsInLastSprint} closed WorkItems in last sprint (average is {sprints.ItemsPerSprint})
-						<br>
-						{sprints.StoryPointsInLastSprint} StoryPoints in last sprint (average is {sprints.StoryPointsPerSprint})
-						<br>			
-						{sprints.LastSprintGoalReached switch
+					<b>{heading ?? "Statistics"}</b>
+					<br>
+					{sprints.ItemsInLastSprint} closed WorkItems in last sprint (average is {sprints.ItemsPerSprint})
+					<br>
+					{sprints.StoryPointsInLastSprint} StoryPoints in last sprint (average is {sprints.StoryPointsPerSprint})
+					<br>			
+					{sprints.LastSprintGoalReached switch
 					{
 						true => "👍 sprint goal was achieved",
 						false => "👎 sprint goal was not achieved",
 						_ => ""
 					}}
-						<br>
-						{iteration.FractionClosedWorkItems:0%} closed WorkItems of current iteration
-						<br>
-						{iteration.FractionCommittedWorkItems:0%} committed WorkItems of current iteration
-						<br>
-						{iteration.FractionClosedCommittedWorkItems:0%} closed committed WorkItems of current iteration
-						<br>
-						{iteration.FractionNonRoadmapWork:0%} non-roadmap work
-						"""
+					<br>
+					{iteration.FractionClosedWorkItems:0%} closed WorkItems of current iteration
+					<br>
+					{iteration.FractionCommittedWorkItems:0%} committed WorkItems of current iteration
+					<br>
+					{iteration.FractionClosedCommittedWorkItems:0%} closed committed WorkItems of current iteration
+					<br>
+					{iteration.FractionNonRoadmapWork:0%} non-roadmap work
+					{(heading != null ? "<br><br>" : "")}
+					"""
 					);
 				},
 				End: () =>
@@ -253,9 +274,9 @@ namespace popilot.cli.Verbs
 					AnsiConsole.WriteLine();
 					AnsiConsole.WriteLine();
 				},
-				Statistics: (sprints, iteration) =>
+				Statistics: (sprints, iteration, heading) =>
 				{
-					Boring("Statistik");
+					Boring(heading ?? "Statistik");
 					Info($"{sprints.ItemsInLastSprint} abgeschlossene WorkItems im letzen Sprint (Durchschnitt ist {sprints.ItemsPerSprint})");
 					Info($"{sprints.StoryPointsInLastSprint} StoryPoints im letzten Sprint (Durchschnitt ist {sprints.StoryPointsPerSprint})");
 				},
