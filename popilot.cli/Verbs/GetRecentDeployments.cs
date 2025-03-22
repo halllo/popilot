@@ -1,8 +1,6 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Logging;
-using Spectre.Console;
 using System.Diagnostics;
-using System.Text;
 
 namespace popilot.cli.Verbs
 {
@@ -19,10 +17,13 @@ namespace popilot.cli.Verbs
 		public string? PathPrefix { get; set; }
 
 		[Option(longName: "latestBuilds", Required = false, HelpText = "how many builds to look back (default is 1)")]
-		public int? LatestBuilds { get; set; }
+		public int LatestBuilds { get; set; } = 1;
 
 		[Option('h', longName: "hours", Required = false, HelpText = "recent hours (default is 8)")]
 		public int RecentHours { get; set; } = 8;
+
+		[Option(longName: "onlyLastSuccessfulBuild", Required = false, HelpText = "ignore older than last successful build")]
+		public bool OnlyLastSuccessfulBuild { get; set; }
 
 		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
 		public bool GenerateDocument { get; set; }
@@ -32,31 +33,9 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetPipelines> logger)
 		{
-			var recentDeployedBuilds = azureDevOps.GetDeployableBuilds(Project, Team, PathPrefix, LatestBuilds)
-				.Where(r => r.successfulOnProd && r.lastEvent?.FinishTime > DateTime.Now.AddHours(-1 * RecentHours));
+			var releaseNotification = new ReleaseNotification(azureDevOps);
 
-			var recentDeployedReleases = azureDevOps.GetDeployableReleases(Project, null, null)
-				.Where(r => r.OnProduction && r.LastModifiedOn > DateTime.Now.AddHours(-1 * RecentHours));
-
-			var recentlyDeployed = AsyncEnumerable.Concat(
-				recentDeployedBuilds.Select(r => new { name = r.artifactName.Replace("-main", "", StringComparison.InvariantCultureIgnoreCase), version = r.latestBuild.BuildNumber }),
-				recentDeployedReleases.Select(r => new { name = r.ArtifactName.Replace("-main", "", StringComparison.InvariantCultureIgnoreCase), version = r.ArtifactVersion }));
-
-			var html = new StringBuilder();
-			html.AppendLine("<html><head><style>table { border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; } th { background-color: #f2f2f2; }</style></head><body>");
-			html.AppendLine("We have deployed the following services to production:");
-			html.AppendLine("<ul>");
-			await foreach (var deployment in recentlyDeployed.OrderBy(d => d.name))
-			{
-				html.AppendLine($"<li>{deployment.name} {deployment.version}</li>");
-			}
-			html.AppendLine("</ul>");
-			if (ReleaseNotesUrl != null)
-			{
-				html.AppendLine($"\nRelease Notes are available <a href=\"{ReleaseNotesUrl}\">here</a>.");
-			}
-			html.AppendLine("</body></html>");
-
+			var html = await releaseNotification.Html(Project, Team, PathPrefix, LatestBuilds, RecentHours, OnlyLastSuccessfulBuild, ReleaseNotesUrl);
 
 			if (GenerateDocument)
 			{

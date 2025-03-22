@@ -240,7 +240,7 @@ namespace popilot
 
 
 
-		public async IAsyncEnumerable<DeployableBuild> GetDeployableBuilds(string? project, string? team, string? pathPrefix = null, int? latestBuilds = null)
+		public async IAsyncEnumerable<DeployableBuild> GetDeployableBuilds(string? project, string? team, string? pathPrefix = null, int? latestBuilds = null, Predicate<BuildDefinitionReference>? buildDefinitionFilter = null)
 		{
 			await this.Init();
 			var teamContext = new TeamContext(project ?? this.options.Value.DefaultProject);
@@ -251,6 +251,7 @@ namespace popilot
 				path: pathPrefix ?? (team != null ? $"\\{team.Replace("Team", "", StringComparison.InvariantCultureIgnoreCase).Trim()}" : null));
 
 			var recentDeployments = definitions
+				.WhereIf(buildDefinitionFilter != null, d => buildDefinitionFilter!(d))
 				.OrderBy(d => d.Name)
 				.ToAsyncEnumerable()
 				.SelectManyAwait(async definition =>
@@ -268,11 +269,12 @@ namespace popilot
 						{
 							var timeline = build?.Id != null ? await this.buildClient.GetBuildTimelineAsync(teamContext.Project, build.Id) : null;
 							var lastEvent = timeline?.Records.MaxBy(r => r.FinishTime);
+							var lastStageEvent = timeline?.Records.Where(r => r.RecordType == "Stage").MaxBy(r => r.FinishTime);
 							var stages = timeline?.Records != null ? timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order) : Enumerable.Empty<TimelineRecord>();
 							var hasProd = stages.Any(s => s.Name.StartsWith("Production"));
 							var successfulOnProd = stages.Any(s => s.Name.StartsWith("Production") && s.State == TimelineRecordState.Completed && s.Result == TaskResult.Succeeded);
 							var artifactName = definition.Name;
-							return new DeployableBuild(definition, build!, artifactName, timeline!, lastEvent!, stages, hasProd, successfulOnProd);
+							return new DeployableBuild(definition, build!, artifactName, timeline, lastEvent, lastStageEvent, stages, hasProd, successfulOnProd);
 						});
 				});
 
@@ -281,7 +283,7 @@ namespace popilot
 				yield return recentDeployment;
 			}
 		}
-		public record DeployableBuild(BuildDefinitionReference definition, Build latestBuild, string artifactName, Timeline timeline, TimelineRecord lastEvent, IEnumerable<TimelineRecord> stages, bool hasProd, bool successfulOnProd);
+		public record DeployableBuild(BuildDefinitionReference definition, Build latestBuild, string artifactName, Timeline? timeline, TimelineRecord? lastEvent, TimelineRecord? lastStageEvent, IEnumerable<TimelineRecord> stages, bool hasProd, bool successfulOnProd);
 
 
 		public async IAsyncEnumerable<DeployableRelease> GetDeployableReleases(string? project, string? team, string? pathPrefix = null, string? searchText = null)

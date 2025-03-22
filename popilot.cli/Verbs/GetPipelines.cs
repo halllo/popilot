@@ -26,16 +26,16 @@ namespace popilot.cli.Verbs
 				.Select(d =>
 				{
 					var stageStatus = string.Join("-", d.stages.Select(GetPipeline.Icon));
-					return new { d.definition, d.latestBuild, d.timeline, d.lastEvent, stageStatus, d.hasProd, d.successfulOnProd };
+					return new { d.definition, d.latestBuild, d.timeline, d.lastStageEvent, stageStatus, d.hasProd, d.successfulOnProd };
 				})
-				.OrderByDescending(r => r.lastEvent?.FinishTime);
+				.OrderByDescending(r => r.lastStageEvent?.FinishTime);
 
 			var table = new Table().Expand();
 			table.AddColumn("#");
 			table.AddColumn("Pipeline");
 			table.AddColumn("Latest Build");
 			table.AddColumn("Status");
-			table.AddColumn("Event Time");
+			table.AddColumn("Finish Time");
 			table.ShowRowSeparators = true;
 			var rows = await deployableBuilds.ToListAsync();
 			foreach (var row in rows)
@@ -45,7 +45,7 @@ namespace popilot.cli.Verbs
 					new Markup($"{row.definition.Name}"),
 					new Markup($"[gray]{row.latestBuild?.BuildNumber}[/]"),
 					new Markup(row.stageStatus),
-					new Markup($"[gray]{row.lastEvent?.FinishTime}[/]")
+					new Markup($"[gray]{row.lastStageEvent?.FinishTime}[/]")
 				);
 			}
 			AnsiConsole.Write(table);
@@ -81,11 +81,13 @@ namespace popilot.cli.Verbs
 			table.AddColumn("#");
 			table.AddColumn("Build");
 			table.AddColumn("");
+			table.AddColumn("LastStage");
 			table.ShowRowSeparators = true;
 
 			foreach (var build in builds.OrderByDescending(b => b.QueueTime))
 			{
 				var timeline = await azureDevOps.buildClient.GetBuildTimelineAsync(teamContext.Project, build.Id);
+				var lastStage = timeline.Records.Where(r => r.RecordType == "Stage").MaxBy(r => r.FinishTime);
 				var stages = timeline.Records.Where(r => r.RecordType == "Stage").OrderBy(r => r.Order);
 
 				var stageStatus = string.Join("-", stages.Select(Icon));
@@ -93,7 +95,9 @@ namespace popilot.cli.Verbs
 				table.AddRow(
 					new Markup($"[gray]{build.Id}[/]"),
 					new Markup($"{build.BuildNumber}"),
-					new Markup(stageStatus));
+					new Markup(stageStatus),
+					new Markup($"[gray]{lastStage?.Name} {lastStage?.FinishTime}[/]")
+					);
 			}
 			AnsiConsole.Write(table);
 			logger.LogInformation("{Count} builds loaded", builds.Count);
