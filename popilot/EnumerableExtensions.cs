@@ -24,6 +24,14 @@ namespace popilot
 				return source;
 		}
 
+		public static IAsyncEnumerable<T> WhereIf<T>(this IAsyncEnumerable<T> source, bool condition, Func<T, bool> predicate)
+		{
+			if (condition)
+				return source.Where(predicate);
+			else
+				return source;
+		}
+
 		public static IEnumerable<T> Unfold<T>(this IEnumerable<T> items, Func<T, IEnumerable<T>?> childrenSelector) where T : class
 		{
 			foreach (var item in items)

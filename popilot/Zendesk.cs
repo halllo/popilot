@@ -102,9 +102,86 @@ namespace popilot
 			}
 		}
 
-		public record TicketsResponse(Ticket[] Tickets, string? NextPage, string? PreviousPage, int Cound);
-		public record Ticket(string Url, long Id, string? ExternalId, long OrganizationId, long RequesterId, long SubmitterId, long? AssigneeId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, JsonElement Via, string Priority, string Status, string Subject, string[] Tags, string Description, CustomField[] CustomFields);
+		public record TicketsResponse(Ticket[] Tickets, string? NextPage, string? PreviousPage, int Count);
+		public record Ticket(string Url, long Id, string? ExternalId, long OrganizationId, long RequesterId, long SubmitterId, long? AssigneeId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, JsonElement Via, string Type, string Priority, string Status, string Subject, int? ProblemId, bool HasIncidents, string[] Tags, string Description, CustomField[] CustomFields);
 		public record CustomField(long Id, object? Value);
+
+
+
+
+
+
+		public async Task<Ticket?> GetTicket(int ticketId)
+		{
+			var ticketResponse = await http.GetAsync($"v2/tickets/{ticketId}.json");
+			if (!ticketResponse.IsSuccessStatusCode)
+			{
+				var content = await ticketResponse.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+			var ticket = await ticketResponse.Content.ReadFromJsonAsync<TicketResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return ticket?.Ticket;
+		}
+
+		public record TicketResponse(Ticket Ticket);
+
+		public async Task<JsonElement> GetTicketRaw(int ticketId)
+		{
+			var ticketResponse = await http.GetAsync($"v2/tickets/{ticketId}.json");
+			if (!ticketResponse.IsSuccessStatusCode)
+			{
+				var content = await ticketResponse.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+			var ticket = await ticketResponse.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return ticket;
+		}
+
+		public async IAsyncEnumerable<Comment> GetTicketComments(int ticketId)
+		{
+			var nextPage = $"v2/tickets/{ticketId}/comments.json";
+			while (nextPage != null)
+			{
+				var responseNextPage = await http.GetAsync(nextPage);
+				if (!responseNextPage.IsSuccessStatusCode)
+				{
+					var content = await responseNextPage.Content.ReadAsStringAsync();
+					throw new ZendeskFetchException(content);
+				}
+
+				var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<CommentsResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+
+				if (contentNextPage?.Comments != null)
+				{
+					foreach (var comment in contentNextPage.Comments)
+					{
+						yield return comment;
+					}
+				}
+
+				nextPage = contentNextPage?.NextPage;
+			}
+		}
+
+		public record CommentsResponse(Comment[] Comments, string? NextPage, string? PreviousPage, int Count);
+		public record Comment(long Id, long AuthorId, string Body, string HtmlBody, string PlainBody, DateTimeOffset CreatedAt, JsonElement Via);
+
+
+
+
+
+
+		public async Task<JsonElement> GetTicketFields()
+		{
+			var ticketResponse = await http.GetAsync($"v2/ticket_fields.json");
+			if (!ticketResponse.IsSuccessStatusCode)
+			{
+				var content = await ticketResponse.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+			var ticket = await ticketResponse.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return ticket;
+		}
 
 
 

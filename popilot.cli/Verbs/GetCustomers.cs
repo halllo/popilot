@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using popilot;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
@@ -46,7 +47,8 @@ namespace popilot.cli.Verbs
 							o.Name,
 							Tickets = await zendesk.GetTickets(o.Id)
 								.Where(t => (customers.TicketStatusFilters ?? []).Any() ? (customers.TicketStatusFilters ?? []).Contains(t.Status) : true)
-								.Where(t => t.CustomFields.Any(c => c.Id == customers.TicketCustomFieldId && c.Value?.ToString() == customers.TicketCustomFieldValue))
+								.WhereIf(customers.TicketCustomFieldFiltersOperator.Equals("OR", StringComparison.InvariantCultureIgnoreCase), t => customers.TicketCustomFieldFilters.Any(f => t.CustomFields.Any(c => c.Id == f.Id && c.Value?.ToString() == f.Value)))
+								.WhereIf(customers.TicketCustomFieldFiltersOperator.Equals("AND", StringComparison.InvariantCultureIgnoreCase), t => customers.TicketCustomFieldFilters.All(f => t.CustomFields.Any(c => c.Id == f.Id && c.Value?.ToString() == f.Value)))
 								.SelectAwait(async t => new
 								{
 									t.Id,
@@ -55,8 +57,9 @@ namespace popilot.cli.Verbs
 									t.Status,
 									t.CreatedAt,
 									t.UpdatedAt,
-									CustomFields = t.CustomFields.Where(c => c.Id == customers.TicketCustomFieldId),
-									Organization = new { o.Id, o.Name, OrganizationField = o.GetOrgField(customers.OrganizationField), Requestor = (await zendesk.GetUser(t.RequesterId))?.Email }
+									CustomFields = t.CustomFields.Where(c => c.Value != null),
+									Organization = new { o.Id, o.Name, OrganizationField = o.GetOrgField(customers.OrganizationField), Requestor = (await zendesk.GetUser(t.RequesterId))?.Email },
+									t.ProblemId,
 								})
 								.ToListAsync(),
 						})
@@ -102,8 +105,9 @@ namespace popilot.cli.Verbs
 			html.AppendLine($"""
 				<span style="font-size: xx-small;">
 					OrganizationField: {customers.OrganizationField}<br>
-					TicketCustomFieldId: {customers.TicketCustomFieldId}<br>
-					TicketCustomFieldValue: {customers.TicketCustomFieldValue}<br>
+					TicketCustomFieldFiltersOperator: {customers.TicketCustomFieldFiltersOperator}<br>
+					TicketCustomFieldFilters: {JsonSerializer.Serialize(customers.TicketCustomFieldFilters)}<br>
+					TicketCustomFieldColumns: {string.Join(',', customers.TicketCustomFieldColumns ?? [])}<br>
 					TicketStatusFilters: {string.Join(',', customers.TicketStatusFilters ?? [])}<br>
 					WorkItemStatusFilter: {customers.WorkItemStatusFilter}<br>
 					WorkItemStatusFilterNegated: {customers.WorkItemStatusFilterNegated}<br>
@@ -154,11 +158,14 @@ namespace popilot.cli.Verbs
 							_ => t.Status,
 						};
 
+						var columns = (customers.TicketCustomFieldColumns ?? []).Select(c => t.CustomFields.FirstOrDefault(f => f.Id == c)?.Value).Where(c => c is not null).ToArray();
 						string ticketLine = $"""
 							<span>{Emoji.Known.Fire}<a href="https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}">{t.Id}</a></span>
 							<span>{t.Subject}</span>
+							{(columns.Any() ? $"<span style=\"color:gray;\">[{string.Join(" ", columns)}]</span>" : string.Empty)}
 							<span style="color:gray;">[{priority}]</span>
-							<span style="color:gray;">[{status}]</span>
+							<span style="color:gray;">[status:{status}]</span>
+							{(t.ProblemId.HasValue ? $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.ProblemId}\">{t.ProblemId}</a></b></span>" : string.Empty)}
 							<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
 						""";
 
@@ -230,9 +237,16 @@ namespace popilot.cli.Verbs
 		{
 			//Zendesk
 			public string OrganizationField { get; set; } = null!;
-			public long TicketCustomFieldId { get; set; }
-			public string TicketCustomFieldValue { get; set; } = null!;
+			public string TicketCustomFieldFiltersOperator { get; set; } = null!;
+			public FieldFilter[] TicketCustomFieldFilters { get; set; } = null!;
+			public class FieldFilter
+			{
+				public long Id { get; set; }
+				public string Value { get; set; } = null!;
+			}
 			public string[]? TicketStatusFilters { get; set; }
+			public long[]? TicketCustomFieldColumns { get; set; }
+
 
 			//AzureDevOps
 			public string? WorkItemStatusFilter { get; set; }
