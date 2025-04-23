@@ -5,6 +5,7 @@ using Microsoft.Identity.Client.Extensions.Msal;
 using Microsoft.TeamFoundation.Build.WebApi;
 using Microsoft.TeamFoundation.Core.WebApi;
 using Microsoft.TeamFoundation.Core.WebApi.Types;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 using Microsoft.TeamFoundation.Work.WebApi;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
@@ -31,6 +32,7 @@ namespace popilot
 		public ProjectHttpClient? projectClient;
 		public BuildHttpClient? buildClient;
 		public ReleaseHttpClient? releaseClient;
+		public GitHttpClient? gitClient;
 
 		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger, bool logAccount = true)
 		{
@@ -91,6 +93,7 @@ namespace popilot
 			this.buildClient = connection.GetClient<BuildHttpClient>();
 			this.releaseClient = connection.GetClient<ReleaseHttpClient>();
 			this.projectClient = connection.GetClient<ProjectHttpClient>();
+			this.gitClient = connection.GetClient<GitHttpClient>();
 		}
 
 		public void Dispose()
@@ -100,6 +103,7 @@ namespace popilot
 			this.buildClient?.Dispose();
 			this.releaseClient?.Dispose();
 			this.projectClient?.Dispose();
+			this.gitClient?.Dispose();
 			this.connection?.Dispose();
 		}
 
@@ -1119,7 +1123,7 @@ namespace popilot
 			return response;
 		}
 
-		public async Task<Comment> AddComment(string project, int workItemId, string text, CancellationToken cancellationToken)
+		public async Task<Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models.Comment> AddComment(string project, int workItemId, string text, CancellationToken cancellationToken)
 		{
 			await this.Init();
 			var comment = await this.workItemClient!.AddCommentAsync(new CommentCreate { Text = text }, project, workItemId, cancellationToken: cancellationToken);
