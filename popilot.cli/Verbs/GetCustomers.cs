@@ -6,6 +6,7 @@ using Spectre.Console;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace popilot.cli.Verbs
 {
@@ -15,7 +16,7 @@ namespace popilot.cli.Verbs
 		[Option(longName: "config", Required = true)]
 		public string ConfigFile { get; set; } = null!;
 
-		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard)
+		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard, IAi ai)
 		{
 			var customers = JsonSerializer.Deserialize<Customers>(File.ReadAllText(ConfigFile), new JsonSerializerOptions()
 			{
@@ -64,7 +65,16 @@ namespace popilot.cli.Verbs
 								.ToListAsync(),
 						})
 						.SelectMany(o => o.Tickets.ToAsyncEnumerable())
-						.OrderByDescending(o => o.CreatedAt)
+						.OrderByDescending(o => o.Status == "closed" || o.Status == "solved" ? 0 : 1)
+						.ThenByDescending(o => o.Priority switch
+						{
+							"urgent" => 3,
+							"high" => 2,
+							"normal" => 1,
+							"low" => 0,
+							_ => -1,
+						})
+						.ThenByDescending(o => o.CreatedAt)
 						.ToListAsync(),
 
 					workItems = customer.customerConfig.QueryId.HasValue
@@ -140,38 +150,179 @@ namespace popilot.cli.Verbs
 
 				if (loadedCustomer.tickets != null && loadedCustomer.tickets.Any())
 				{
-					html.AppendLine($"<h4>Tickets</h4>");
-					var ticketLines = string.Join("<br>", (loadedCustomer.tickets ?? []).Select(t =>
+					html.AppendLine($"<h4>Incidents</h4>");
 					{
-						string priority = t.Priority switch
+						var ticketLines = string.Join("<br>", loadedCustomer.tickets.Select(t =>
 						{
-							"urgent" => $"""<span style="color:red;">{t.Priority}</span>""",
-							"high" => $"""<span style="color:orange;">{t.Priority}</span>""",
-							"normal" => $"""<span style="color:black;">{t.Priority}</span>""",
-							"low" => $"""<span style="color:gray;">{t.Priority}</span>""",
-							_ => t.Priority,
-						};
-						string status = t.Status switch
+							var ticketId = $"<span>{Emoji.Known.Fire}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}\">{t.Id}</a></span>";
+
+							var ticketSubject = $"<span>{t.Subject}</span>";
+
+							var columns = (customers.TicketCustomFieldColumns ?? [])
+								.Select(c => t.CustomFields.FirstOrDefault(f => f.Id == c)?.Value)
+								.Where(c => c is not null)
+								.ToArray();
+							var ticketColumns = columns.Any() ? $"<span style=\"color:gray;\">[{string.Join(" ", columns)}]</span>" : string.Empty;
+
+							var priority = t.Priority switch
+							{
+								"urgent" => $"""<span style="color:red;">{t.Priority}</span>""",
+								"high" => $"""<span style="color:orange;">{t.Priority}</span>""",
+								"normal" => $"""<span style="color:black;">{t.Priority}</span>""",
+								"low" => $"""<span style="color:gray;">{t.Priority}</span>""",
+								_ => t.Priority,
+							};
+							var ticketPrio = $"<span style=\"color:gray;\">[{priority}]</span>";
+
+							var status = t.Status switch
+							{
+								"solved" => $"""<span style="color:green;">{t.Status}</span>""",
+								"closed" => $"""<span style="color:green;">{t.Status}</span>""",
+								_ => t.Status,
+							};
+							var ticketStatus = $"<span style=\"color:gray;\">[status:{status}]</span>";
+
+							var ticketProblemId = t.ProblemId.HasValue ? $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.ProblemId}\">{t.ProblemId}</a></b></span>" : string.Empty;
+
+							var ticketRequestor = $"<span style=\"color:gray;\">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>";
+
+							return $"""
+								<span {(t.Status == "closed" || t.Status == "solved" ? "style=\"text-decoration: line-through;\"" : string.Empty)}>
+								{ticketId}
+								{ticketSubject}
+								{ticketColumns}
+								{ticketPrio}
+								{ticketStatus}
+								{ticketProblemId}
+								{ticketRequestor}
+								</span>
+								""";
+						}));
+						html.AppendLine($"{ticketLines}<br>");
+					}
+
+					html.AppendLine($"<h4>Problems</h4>");
+					{
+						var workItemCatcher = new Regex("https\\:\\/\\/dev\\.azure\\.com.*?/edit/(?<wid>\\d*?)(\\s|$)", RegexOptions.Singleline | RegexOptions.Compiled);
+
+						html.AppendLine($"<table>");
+						var headers =
+							"""
+							<th>problem</th>
+							<!--th>columns</th>
+							<th>prio</th>
+							<th>status</th>
+							<th>problem</th-->
+							<th>incidents</th>
+							<th>work items</th>
+							<th>progress since yesterday</th>
+							<th>progress since last week</th>
+							""";
+						html.AppendLine($"<tr>{headers}</tr>");
+
+						foreach (var p in loadedCustomer.tickets.GroupBy(t => t.ProblemId).Where(p => p.Key.HasValue))
 						{
-							"solved" => $"""<span style="color:green;">{t.Status}</span>""",
-							"closed" => $"""<span style="color:green;">{t.Status}</span>""",
-							_ => t.Status,
-						};
+							var problemId = p.Key!.Value;
+							var problemIdLabel = $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{problemId}\">{problemId}</a></b></span>";
 
-						var columns = (customers.TicketCustomFieldColumns ?? []).Select(c => t.CustomFields.FirstOrDefault(f => f.Id == c)?.Value).Where(c => c is not null).ToArray();
-						string ticketLine = $"""
-							<span>{Emoji.Known.Fire}<a href="https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}">{t.Id}</a></span>
-							<span>{t.Subject}</span>
-							{(columns.Any() ? $"<span style=\"color:gray;\">[{string.Join(" ", columns)}]</span>" : string.Empty)}
-							<span style="color:gray;">[{priority}]</span>
-							<span style="color:gray;">[status:{status}]</span>
-							{(t.ProblemId.HasValue ? $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.ProblemId}\">{t.ProblemId}</a></b></span>" : string.Empty)}
-							<span style="color:gray;">[{t.Organization.Requestor} {t.CreatedAt:d}]</span>
-						""";
+							var incidentLabels = p
+								.Select(t => $"<span>{Emoji.Known.Fire}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}\">{t.Id}</a></span>")
+								.ToList();
 
-						return ticketLine;
-					}));
-					html.AppendLine($"{ticketLines}<br>");
+							var zendeskComments = await zendesk.GetTicketComments(problemId)
+								.OrderBy(c => c.CreatedAt)
+								.Skip(1)//we ignore the initial comment because it is the problem description
+								.ToListAsync();
+
+							var workItems = await zendeskComments
+								.SelectMany(c => workItemCatcher.Matches(c.PlainBody).Select(m => m.Groups["wid"].Value))
+								.ToAsyncEnumerable()
+								.SelectAwait(async wid => await azureDevOps.GetWorkItems([int.Parse(wid)]))
+								.SelectMany(ws => ws.ToAsyncEnumerable())
+								.ToListAsync();
+
+							var workItemLabels = workItems
+								.Select(w =>
+								{
+									string type = w.Type switch
+									{
+										"Epic" => Emoji.Known.Crown,
+										"Feature" => Emoji.Known.GemStone,
+										"Bug" => Emoji.Known.Collision,
+										"User Story" => Emoji.Known.PersonInTuxedo,
+										"Task" => Emoji.Known.CheckMarkButton,
+										_ => w.Type,
+									};
+									string state = w.State switch
+									{
+										"Closed" => $"""<span style="color:green;">{w.State}</span>""",
+										"Resolved" => $"""<span style="color:cyan;">{w.State}</span>""",
+										"Active" => $"""<span style="color:yellow;">{w.State}</span>""",
+										_ => $"""<span style="color:gray;">{w.State}</span>""",
+									};
+
+									return $"""
+											<span>{type}<a href="{w.UrlHumanReadable()}">{w.Id}</a></span>
+											<span style="color:gray;">[</span>{state}<span style="color:gray;">]</span>
+											""";
+								})
+								.ToList();
+
+							var azuredevopsComments = await workItems
+								.ToAsyncEnumerable()
+								.SelectAwait(async w => await azureDevOps.GetComments(w.Id))
+								.SelectMany(c => c.ToAsyncEnumerable())
+								.OrderBy(c => c.RevisedDate)
+								.ToListAsync();
+
+							var comments = Enumerable.Concat(
+								zendeskComments.Select(c => new
+								{
+									Date = c.CreatedAt,
+									Text = c.PlainBody,
+								}),
+								azuredevopsComments.Select(c => new
+								{
+									Date = new DateTimeOffset(c.RevisedDate),
+									Text = c.Text,
+								})
+							);
+
+							const string processSummaryPrompt = "Summarize the progress described in these comments of a support ticket. Be as short and concise as possible. The shorter the better.";
+
+							var commentsSinceYesterday = comments.Where(c => c.Date > DateTimeOffset.Now.AddDays(-1));
+							var progressSinceYesterday = commentsSinceYesterday.Any()
+								? await ai.Ask(
+									prompt: processSummaryPrompt + " Start with 'Since yesterday...'",
+									content: string.Join("\n\n", commentsSinceYesterday.Select(c => c.Text)))
+								: "No progress since yesterday.";
+
+							var commentsSinceLastWeek = comments.Where(c => c.Date > DateTimeOffset.Now.AddDays(-7));
+							var progressSinceLastWeek = commentsSinceLastWeek.Any()
+								? await ai.Ask(
+									prompt: processSummaryPrompt + " Start with 'Since last week...'",
+									content: string.Join("\n\n", commentsSinceLastWeek.Select(c => c.Text)))
+								: "No progress since last week.";
+
+							var closed = false;// t.ticket.Status == "closed" || t.ticket.Status == "solved";
+							string td(string s) => $"<td>{s}</td>";
+							string strikethroughIfClosed(string? s) => closed ? $"<span style=\"text-decoration: line-through;\">{s}</span>" : (s ?? "");
+							var row =
+								$"""
+								{td(strikethroughIfClosed(problemIdLabel))}
+								{/*td(strikethroughIfClosed(t.columns))*/""}
+								{/*td(strikethroughIfClosed(t.prio))*/""}
+								{/*td(strikethroughIfClosed(t.status))*/""}
+								{td(string.Join(" ", incidentLabels))}
+								{td(string.Join(" ", workItemLabels))}
+								{td(progressSinceYesterday)}
+								{td(progressSinceLastWeek)}
+								""";
+
+							html.AppendLine($"<tr>{row}</tr>");
+						}
+						html.AppendLine($"</table>");
+					}
 				}
 
 				if (loadedCustomer.workItems != null && loadedCustomer.workItems.Any())
@@ -246,7 +397,6 @@ namespace popilot.cli.Verbs
 			}
 			public string[]? TicketStatusFilters { get; set; }
 			public long[]? TicketCustomFieldColumns { get; set; }
-
 
 			//AzureDevOps
 			public string? WorkItemStatusFilter { get; set; }

@@ -24,7 +24,7 @@ Fasse dich kurz. Erwähne Work Items im Status 'New' als geplant und Work Items 
 				w.Title,
 				Topic = w.ParentTitle,
 			}), indented: false);
-			return ai.Summarize(json, prompt, consoleWrite);
+			return ai.Ask(prompt, json, consoleWrite);
 		}
 
 		private static string Json(object? o, bool indented = true) => o == null ? "<null>" : JsonSerializer.Serialize(o, o.GetType(), new JsonSerializerOptions
@@ -34,7 +34,7 @@ Fasse dich kurz. Erwähne Work Items im Status 'New' als geplant und Work Items 
 			NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
 		});
 
-		public static async Task<string> Summarize(this IAi ai, string content, string prompt, bool consoleWrite = true)
+		public static async Task<string> Ask(this IAi ai, string prompt, string content, bool consoleWrite = true)
 		{
 			if (ai.Client == null) throw new NotSupportedException("Summaries without OpenAI config are not supported. Please add an OpenAiApiKey or use the --no-ai option!");
 

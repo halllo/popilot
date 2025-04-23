@@ -35,9 +35,17 @@ namespace popilot.cli.Verbs
 
 			if (ShowComments)
 			{
-				await foreach (var comment in zendesk.GetTicketComments(TicketId))
+				if (ShowAllValues)
 				{
-					Json.Out(new { comment.Id, comment.AuthorId, comment.CreatedAt, comment.PlainBody });
+					var json = await zendesk.GetTicketCommentsRaw(TicketId);
+					Json.Out(json);
+				}
+				else
+				{
+					await foreach (var comment in zendesk.GetTicketComments(TicketId))
+					{
+						Json.Out(new { comment.Id, comment.AuthorId, comment.CreatedAt, comment.PlainBody });
+					}
 				}
 			}
 		}

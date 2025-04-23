@@ -163,6 +163,20 @@ namespace popilot
 			}
 		}
 
+		public async Task<JsonElement> GetTicketCommentsRaw(int ticketId)
+		{
+			var nextPage = $"v2/tickets/{ticketId}/comments.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return contentNextPage;
+		}
+
 		public record CommentsResponse(Comment[] Comments, string? NextPage, string? PreviousPage, int Count);
 		public record Comment(long Id, long AuthorId, string Body, string HtmlBody, string PlainBody, DateTimeOffset CreatedAt, JsonElement Via);
 

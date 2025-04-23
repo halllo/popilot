@@ -1129,6 +1129,13 @@ namespace popilot
 			var comment = await this.workItemClient!.AddCommentAsync(new CommentCreate { Text = text }, project, workItemId, cancellationToken: cancellationToken);
 			return comment;
 		}
+
+		public async Task<IReadOnlyList<WorkItemComment>> GetComments(int workItemId, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var comments = await this.workItemClient!.GetCommentsAsync(workItemId, cancellationToken: cancellationToken);
+			return comments.Comments.ToList();
+		}
 	}
 
 
