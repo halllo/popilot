@@ -209,10 +209,6 @@ namespace popilot.cli.Verbs
 						var headers =
 							"""
 							<th>problem</th>
-							<!--th>columns</th>
-							<th>prio</th>
-							<th>status</th>
-							<th>problem</th-->
 							<th>incidents</th>
 							<th>work items</th>
 							<th>progress since yesterday</th>
@@ -220,14 +216,56 @@ namespace popilot.cli.Verbs
 							""";
 						html.AppendLine($"<tr>{headers}</tr>");
 
-						foreach (var p in loadedCustomer.tickets.GroupBy(t => t.ProblemId).Where(p => p.Key.HasValue))
-						{
-							var problemId = p.Key!.Value;
-							var problemIdLabel = $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{problemId}\">{problemId}</a></b></span>";
+						var problemReferences = loadedCustomer.tickets.GroupBy(t => t.ProblemId).Where(p => p.Key.HasValue);
+						var problems = problemReferences
+							.ToAsyncEnumerable()
+							.SelectAwait(async p => await zendesk.GetTicket(p.Key!.Value))
+							.Where(p => p != null)
+							.Select(p => p!)
+							.OrderByDescending(p => p.Status == "closed" || p.Status == "solved" ? 0 : 1)
+							.ThenByDescending(p => p.Priority switch
+							{
+								"urgent" => 3,
+								"high" => 2,
+								"normal" => 1,
+								"low" => 0,
+								_ => -1,
+							})
+							.ThenByDescending(p => p.CreatedAt);
 
-							var incidentLabels = p
-								.Select(t => $"<span>{Emoji.Known.Fire}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}\">{t.Id}</a></span>")
-								.ToList();
+						await foreach (var problem in problems)
+						{
+							var problemId = (int)problem.Id;
+							var problemLabel = $"<span><b>{Emoji.Known.Detective}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{problemId}\">{problemId}</a></b> {problem.Subject}</span>";
+
+							var incidentLabels = problemReferences
+								.FirstOrDefault(p => p.Key == problemId)
+								?.Select(t => $"<span>{Emoji.Known.Fire}<a href=\"https://{config["ZendeskSubdomain"]}.zendesk.com/agent/tickets/{t.Id}\">{t.Id}</a></span>")
+								.ToList() ?? [];
+
+							var columns = (customers.TicketCustomFieldColumns ?? [])
+								.Select(c => problem.CustomFields.FirstOrDefault(f => f.Id == c)?.Value)
+								.Where(c => c is not null)
+								.ToArray();
+							var problemColumns = columns.Any() ? $"<span style=\"color:gray;\">[{string.Join(" ", columns)}]</span>" : string.Empty;
+
+							var priority = problem.Priority switch
+							{
+								"urgent" => $"""<span style="color:red;">{problem.Priority}</span>""",
+								"high" => $"""<span style="color:orange;">{problem.Priority}</span>""",
+								"normal" => $"""<span style="color:black;">{problem.Priority}</span>""",
+								"low" => $"""<span style="color:gray;">{problem.Priority}</span>""",
+								_ => problem.Priority,
+							};
+							var problemPriority = $"<span style=\"color:gray;\">[{priority}]</span>";
+
+							var status = problem.Status switch
+							{
+								"solved" => $"""<span style="color:green;">{problem.Status}</span>""",
+								"closed" => $"""<span style="color:green;">{problem.Status}</span>""",
+								_ => problem.Status,
+							};
+							var problemStatus = $"<span style=\"color:gray;\">[{status}]</span>";
 
 							var zendeskComments = await zendesk.GetTicketComments(problemId)
 								.OrderBy(c => c.CreatedAt)
@@ -304,19 +342,16 @@ namespace popilot.cli.Verbs
 									content: string.Join("\n\n", commentsSinceLastWeek.Select(c => c.Text)))
 								: "No progress since last week.";
 
-							var closed = false;// t.ticket.Status == "closed" || t.ticket.Status == "solved";
+							var closed = problem.Status == "closed" || problem.Status == "solved";
 							string td(string s) => $"<td>{s}</td>";
 							string strikethroughIfClosed(string? s) => closed ? $"<span style=\"text-decoration: line-through;\">{s}</span>" : (s ?? "");
 							var row =
 								$"""
-								{td(strikethroughIfClosed(problemIdLabel))}
-								{/*td(strikethroughIfClosed(t.columns))*/""}
-								{/*td(strikethroughIfClosed(t.prio))*/""}
-								{/*td(strikethroughIfClosed(t.status))*/""}
-								{td(string.Join(" ", incidentLabels))}
-								{td(string.Join(" ", workItemLabels))}
-								{td(progressSinceYesterday)}
-								{td(progressSinceLastWeek)}
+								{td(strikethroughIfClosed($"{problemLabel} {problemPriority} {problemStatus}"))}
+								{td(strikethroughIfClosed(string.Join(" ", incidentLabels)))}
+								{td(strikethroughIfClosed(string.Join(" ", workItemLabels)))}
+								{td(strikethroughIfClosed(progressSinceYesterday))}
+								{td(strikethroughIfClosed(progressSinceLastWeek))}
 								""";
 
 							html.AppendLine($"<tr>{row}</tr>");
