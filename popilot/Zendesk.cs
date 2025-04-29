@@ -217,5 +217,195 @@ namespace popilot
 		}
 		public record UserResponse(User User);
 		public record User(string Url, long Id, string Name, string Email, long OrganisationId, string Role);
+
+
+
+
+
+
+
+
+		public async Task<JsonElement> GetHelpcenterCategoriesRaw()
+		{
+			var nextPage = $"v2/help_center/categories.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return contentNextPage;
+		}
+
+		public async IAsyncEnumerable<Category> GetHelpcenterCategories()
+		{
+			var nextPage = $"v2/help_center/categories.json";
+			while (nextPage != null)
+			{
+				var responseNextPage = await http.GetAsync(nextPage);
+				if (!responseNextPage.IsSuccessStatusCode)
+				{
+					var content = await responseNextPage.Content.ReadAsStringAsync();
+					throw new ZendeskFetchException(content);
+				}
+
+				var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<CategoriesResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+
+				if (contentNextPage?.Categories != null)
+				{
+					foreach (var section in contentNextPage.Categories)
+					{
+						yield return section;
+					}
+				}
+
+				nextPage = contentNextPage?.NextPage;
+			}
+		}
+
+		public record CategoriesResponse(Category[] Categories, string? NextPage, string? PreviousPage, int Count);
+		public record Category(long Id, string Url, string HtmlUrl, int Position, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, string Name, string Description, string Locale, string SourceLocale, bool Outdated);
+
+		public async Task<JsonElement?> GetHelpcenterCategoryRaw(long id)
+		{
+			var nextPage = $"v2/help_center/categories/{id}.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var userResponse = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return userResponse;
+		}
+
+
+
+
+
+
+		public async Task<JsonElement> GetHelpcenterSectionsRaw()
+		{
+			var nextPage = $"v2/help_center/sections.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return contentNextPage;
+		}
+
+		public async IAsyncEnumerable<Section> GetHelpcenterSections(long? categoryId = null)
+		{
+			var nextPage = categoryId.HasValue ? $"v2/help_center/categories/{categoryId.Value}/sections.json" : "v2/help_center/sections.json";
+			while (nextPage != null)
+			{
+				var responseNextPage = await http.GetAsync(nextPage);
+				if (!responseNextPage.IsSuccessStatusCode)
+				{
+					var content = await responseNextPage.Content.ReadAsStringAsync();
+					throw new ZendeskFetchException(content);
+				}
+
+				var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<SectionsResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+
+				if (contentNextPage?.Sections != null)
+				{
+					foreach (var section in contentNextPage.Sections)
+					{
+						yield return section;
+					}
+				}
+
+				nextPage = contentNextPage?.NextPage;
+			}
+		}
+
+		public record SectionsResponse(Section[] Sections, string? NextPage, string? PreviousPage, int Count);
+		public record Section(long Id, string Url, string HtmlUrl, long CategoryId, int Position, string Sorting, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, string Name, string Description, string Locale, string SourceLocale, bool Outdated, long? ParentSectionId, string ThemeTemplate);
+
+		public async Task<JsonElement?> GetHelpcenterSectionRaw(long id)
+		{
+			var nextPage = $"v2/help_center/sections/{id}.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var userResponse = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return userResponse;
+		}
+
+
+
+
+
+
+
+
+		public async Task<JsonElement> GetHelpcenterArticlesRaw(long sectionId)
+		{
+			var nextPage = $"v2/help_center/sections/{sectionId}/articles.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return contentNextPage;
+		}
+
+		public async IAsyncEnumerable<Article> GetHelpcenterArticles(long? sectionId = null)
+		{
+			var nextPage = sectionId.HasValue ? $"v2/help_center/sections/{sectionId.Value}/articles.json" : "v2/help_center/articles.json";
+			while (nextPage != null)
+			{
+				var responseNextPage = await http.GetAsync(nextPage);
+				if (!responseNextPage.IsSuccessStatusCode)
+				{
+					var content = await responseNextPage.Content.ReadAsStringAsync();
+					throw new ZendeskFetchException(content);
+				}
+
+				var contentNextPage = await responseNextPage.Content.ReadFromJsonAsync<ArticlesResponse>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+
+				if (contentNextPage?.Articles != null)
+				{
+					foreach (var section in contentNextPage.Articles)
+					{
+						yield return section;
+					}
+				}
+
+				nextPage = contentNextPage?.NextPage;
+			}
+		}
+
+		public record ArticlesResponse(Article[] Articles, string? NextPage, string? PreviousPage, int Count);
+		public record Article(long Id, string Url, string HtmlUrl, long AuthorId, bool Draft, bool Promoted, int Position, long SectionId, DateTimeOffset CreatedAt, DateTimeOffset? UpdatedAt, string Name, string Title, string Locale, string SourceLocale, bool Outdated, DateTimeOffset? EditedAt, long? UserSegmentId, long[] UserSegmentIds, long PermissionGroupId, string[] LabelsNames, string Body);
+
+		public async Task<JsonElement?> GetHelpcenterArticleRaw(long id)
+		{
+			var nextPage = $"v2/help_center/articles/{id}.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var userResponse = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return userResponse;
+		}
 	}
 }
