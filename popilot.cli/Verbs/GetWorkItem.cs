@@ -17,13 +17,25 @@ namespace popilot.cli.Verbs
 		{
 			if (Raw)
 			{
-				Boring(Json((await azureDevOps.GetWorkItemsRaw(new[] { Id })).SingleOrDefault()));
+				Boring(Json((await azureDevOps.GetWorkItemsRaw([Id])).SingleOrDefault()));
 			}
 			else
 			{
-				Boring(Json((await azureDevOps.GetWorkItems(new[] { Id })).SingleOrDefault()));
+				var wi = (await azureDevOps.GetWorkItems([Id])).SingleOrDefault();
+				Boring(Json(wi));
 				Boring("State Changes");
 				Boring(Json(await azureDevOps.GetStateChanges(Id)));
+
+				if (wi != null)
+				{
+					Boring("Iteration");
+					var path = wi.IterationPath.StartsWith(wi.TeamProject) ? wi.IterationPath.Substring(wi.TeamProject.Length + 1) : wi.IterationPath;
+					var iterations = await azureDevOps.GetAllIterations(wi.TeamProject, null, path);
+					foreach (var i in iterations)
+					{
+						Console.WriteLine($"{i.Name} ends on {i.Attributes.FinishDate}");
+					}
+				}
 			}
 		}
 	}

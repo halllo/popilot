@@ -275,9 +275,19 @@ namespace popilot.cli.Verbs
 							var workItems = await zendeskComments
 								.SelectMany(c => workItemCatcher.Matches(c.PlainBody).Select(m => m.Groups["wid"].Value))
 								.ToAsyncEnumerable()
+								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
 								.SelectAwait(async wid => await azureDevOps.GetWorkItems([int.Parse(wid)]))
 								.SelectMany(ws => ws.ToAsyncEnumerable())
 								.ToListAsync();
+
+							Dictionary<int, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration?> workItemIdToIteration = [];
+							foreach (var wi in workItems)
+							{
+								var path = wi.IterationPath.StartsWith(wi.TeamProject) ? wi.IterationPath.Substring(wi.TeamProject.Length + 1) : wi.IterationPath;
+								var iterations = await azureDevOps.GetAllIterations(wi.TeamProject, null, path);
+								var iteration = iterations.FirstOrDefault();
+								workItemIdToIteration.Add(wi.Id, iteration);
+							}
 
 							var workItemLabels = workItems
 								.Select(w =>
@@ -299,9 +309,11 @@ namespace popilot.cli.Verbs
 										_ => $"""<span style="color:gray;">{w.State}</span>""",
 									};
 
+									var plannedFinishDate = workItemIdToIteration.ContainsKey(w.Id) ? workItemIdToIteration[w.Id]?.Attributes.FinishDate : null;
 									return $"""
 											<span>{type}<a href="{w.UrlHumanReadable()}">{w.Id}</a></span>
 											<span style="color:gray;">[</span>{state}<span style="color:gray;">]</span>
+											{(plannedFinishDate.HasValue ? $"""<span style="color:gray;">planned for {plannedFinishDate:dd.MM.yyyy}</span>""" : "")}
 											""";
 								})
 								.ToList();
@@ -313,18 +325,21 @@ namespace popilot.cli.Verbs
 								.OrderBy(c => c.RevisedDate)
 								.ToListAsync();
 
-							var comments = Enumerable.Concat(
-								zendeskComments.Select(c => new
-								{
-									Date = c.CreatedAt,
-									Text = c.PlainBody,
-								}),
-								azuredevopsComments.Select(c => new
-								{
-									Date = new DateTimeOffset(c.RevisedDate),
-									Text = c.Text,
-								})
-							);
+							var comments = Enumerable
+								.Concat(
+									zendeskComments.Select(c => new
+									{
+										Date = c.CreatedAt,
+										Text = c.PlainBody,
+									}),
+									azuredevopsComments.Select(c => new
+									{
+										Date = new DateTimeOffset(c.RevisedDate),
+										Text = c.Text,
+									})
+								)
+								.OrderBy(c => c.Date)
+								.ToList();
 
 							const string processSummaryPrompt = "Summarize the progress described in these comments of a support ticket. Be as short and concise as possible. The shorter the better.";
 
