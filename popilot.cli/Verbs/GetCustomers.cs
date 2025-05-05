@@ -211,6 +211,8 @@ namespace popilot.cli.Verbs
 							<th>problem</th>
 							<th>incidents</th>
 							<th>work items</th>
+							<th>status</th>
+							<th>next steps</th>
 							<th>progress since yesterday</th>
 							<th>progress since last week</th>
 							""";
@@ -278,6 +280,14 @@ namespace popilot.cli.Verbs
 								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
 								.SelectAwait(async wid => await azureDevOps.GetWorkItems([int.Parse(wid)]))
 								.SelectMany(ws => ws.ToAsyncEnumerable())
+								.OrderBy(w => w.State switch
+								{
+									"Closed" => 0,
+									"Resolved" => 1,
+									"Active" => 2,
+									_ => 3,
+								})
+								.ThenBy(w => w.CreatedDate)
 								.ToListAsync();
 
 							Dictionary<int, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration?> workItemIdToIteration = [];
@@ -285,8 +295,13 @@ namespace popilot.cli.Verbs
 							{
 								var path = wi.IterationPath.StartsWith(wi.TeamProject) ? wi.IterationPath.Substring(wi.TeamProject.Length + 1) : wi.IterationPath;
 								var iterations = await azureDevOps.GetAllIterations(wi.TeamProject, null, path);
-								var iteration = iterations.FirstOrDefault();
+								var iteration = iterations.FirstOrDefault(i => i.Path == wi.IterationPath);
 								workItemIdToIteration.Add(wi.Id, iteration);
+							}
+							string? plannedFinishDate(AzureDevOps.IWorkItemDto w)
+							{
+								var targetDate = w.TargetDate ?? (workItemIdToIteration.ContainsKey(w.Id) ? workItemIdToIteration[w.Id]?.Attributes.FinishDate : null);
+								return targetDate.HasValue ? $"""<span style="color:gray; font-size:small;">planned for {targetDate:dd.MM.yyyy}</span>""" : "";
 							}
 
 							var workItemLabels = workItems
@@ -309,14 +324,29 @@ namespace popilot.cli.Verbs
 										_ => $"""<span style="color:gray;">{w.State}</span>""",
 									};
 
-									var plannedFinishDate = workItemIdToIteration.ContainsKey(w.Id) ? workItemIdToIteration[w.Id]?.Attributes.FinishDate : null;
 									return $"""
-											<span>{type}<a href="{w.UrlHumanReadable()}">{w.Id}</a></span>
+											<span>{type}<a href="{w.UrlHumanReadable()}" title="{w.Title}">{w.Id}</a></span>
 											<span style="color:gray;">[</span>{state}<span style="color:gray;">]</span>
-											{(plannedFinishDate.HasValue ? $"""<span style="color:gray;">planned for {plannedFinishDate:dd.MM.yyyy}</span>""" : "")}
+											{plannedFinishDate(w)}
 											""";
 								})
 								.ToList();
+
+							var overallState =
+								workItems.All(w => w.State == "Closed") && (problem.Status == "closed" || problem.Status == "solved") ? "Solved" :
+								workItems.Any() && workItems.All(w => w.State == "Closed") ? "Solution Delivered" :
+								workItems.Any(w => w.State == "Resolved" || w.State == "Active") ? "Work in Progress" :
+								"Open";
+
+							var nextSteps = workItems
+								.Where(w => w.State != "Closed")
+								.Select(w => w.State switch
+								{
+									"Resolved" => $"QA/testing {w.Title} {plannedFinishDate(w)}",
+									"Active" => $"Completing {w.Title} {plannedFinishDate(w)}",
+									_ => $"{w.Title} {plannedFinishDate(w)}",
+								})
+								.Select(l => Regex.Replace(l, "\\sZD\\d+", string.Empty).Trim());
 
 							var azuredevopsComments = await workItems
 								.ToAsyncEnumerable()
@@ -365,6 +395,8 @@ namespace popilot.cli.Verbs
 								{td(strikethroughIfClosed($"{problemLabel} {problemPriority} {problemStatus}"))}
 								{td(strikethroughIfClosed(string.Join(" ", incidentLabels)))}
 								{td(strikethroughIfClosed(string.Join(" ", workItemLabels)))}
+								{td(strikethroughIfClosed(overallState))}
+								{td(strikethroughIfClosed(string.Join("; ", nextSteps)))}
 								{td(strikethroughIfClosed(progressSinceYesterday))}
 								{td(strikethroughIfClosed(progressSinceLastWeek))}
 								""";
