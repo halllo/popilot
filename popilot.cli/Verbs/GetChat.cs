@@ -1,6 +1,5 @@
 ﻿using CommandLine;
 using Microsoft.Extensions.Logging;
-using Microsoft.Graph;
 using Spectre.Console;
 
 namespace popilot.cli.Verbs
@@ -17,13 +16,13 @@ namespace popilot.cli.Verbs
 		[Option('d', longName: "take-days", Required = false)]
 		public int? TakeDays { get; set; }
 
-		public async Task Do(GraphServiceClient graphClient, ILogger<GetChat> logger)
+		public async Task Do(Microsoft365 m365, ILogger<GetChat> logger)
 		{
 			if (string.IsNullOrWhiteSpace(Name))
 			{
 				var chats = Take != null 
-					? graphClient.GetMyChats().Take(Take.Value)
-					: graphClient.GetMyChats();
+					? m365.GetMyChats().Take(Take.Value)
+					: m365.GetMyChats();
 
 				var chatCount = 0;
 				await foreach (var chat in chats)
@@ -35,8 +34,8 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var chat = await graphClient.GetMyChats(Name).FirstAsync();
-				var messages = graphClient.GetChatMessages(chat.Id!);
+				var chat = await m365.GetMyChats(Name).FirstAsync();
+				var messages = m365.GetChatMessages(chat.Id!);
 				var messageCount = 0;
 				await foreach (var message in messages.TakeWhile(m => !TakeDays.HasValue || m.CreatedDateTime > DateTime.UtcNow.AddDays(TakeDays.Value * -1)))
 				{

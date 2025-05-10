@@ -13,7 +13,7 @@ namespace popilot.cli.Verbs
 		[Option(longName: "config", Required = true)]
 		public string ConfigFile { get; set; } = null!;
 
-		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard, GraphServiceClient graphClient, IAi ai)
+		public async Task Do(IConfiguration config, ILogger<GetCustomers> logger, AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard, Microsoft365 m365, IAi ai)
 		{
 			var customers = JsonSerializer.Deserialize<CustomerReport.CustomersConfig>(File.ReadAllText(ConfigFile), new JsonSerializerOptions()
 			{
@@ -22,7 +22,7 @@ namespace popilot.cli.Verbs
 			});
 			var organizations = await Cached.Do<List<Zendesk.Organization>>("zendesk_organisations_cached.json", () => throw new NotImplementedException("Run get-organizations first."));
 
-			var customerReport = new CustomerReport(azureDevOps, zendesk, productboard, graphClient, ai, logger);
+			var customerReport = new CustomerReport(azureDevOps, zendesk, productboard, m365, ai, logger);
 			var html = await customerReport.Generate(
 				config: customers!,
 				zendeskOrganizations: organizations,

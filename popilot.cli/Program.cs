@@ -1,4 +1,5 @@
 ﻿using AgentDo;
+using AgentDo.Bedrock;
 using Amazon.BedrockRuntime;
 using Azure.AI.OpenAI;
 using CommandLine;
@@ -94,12 +95,13 @@ static IHostBuilder CreateHostBuilder()
 			});
 			services.AddScoped<AzureDevOps>();
 
-			services.AddSingleton<GraphClientAuthProvider>();
+			services.AddSingleton<Microsoft365.GraphClientAuthProvider>();
 			services.AddSingleton(sp =>
 			{
-				var authProvider = sp.GetRequiredService<GraphClientAuthProvider>();
+				var authProvider = sp.GetRequiredService<Microsoft365.GraphClientAuthProvider>();
 				return new GraphServiceClient(authProvider);
 			});
+			services.AddSingleton<Microsoft365>();
 
 			services.AddHttpClient<Zendesk>().ConfigureHttpClient(h =>
 			{
@@ -117,6 +119,25 @@ static IHostBuilder CreateHostBuilder()
 				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
 				h.BaseAddress = new Uri($"https://api.productboard.com/");
 			});
+
+			services.AddMemoryCache();
+			services.AddHttpClient<Blackduck.Auth>().ConfigureHttpClient(h =>
+			{
+				h.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("token", config["BlackduckApiToken"]);
+				h.BaseAddress = new Uri($"https://{config["BlackduckSubdomain"]}.app.blackduck.com/api/");
+			});
+			services.AddHttpClient<Blackduck>().ConfigureHttpClient(h =>
+			{
+				h.BaseAddress = new Uri($"https://{config["BlackduckSubdomain"]}.app.blackduck.com/api/");
+			}).AddHttpMessageHandler(sp => new HeaderAddingDelegationHandler(beforeSend: async request =>
+			{
+				if (request.Headers.Authorization == null)
+				{
+					var blackduckAuthClient = sp.GetRequiredService<Blackduck.Auth>();
+					var token = await blackduckAuthClient.AcquireTokenCached();
+					request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+				}
+			}));
 
 			services.AddSingleton(sp => new OpenAiService(
 				Client: string.IsNullOrWhiteSpace(config["OpenAiApiKey"]) ? null : new OpenAIClient(

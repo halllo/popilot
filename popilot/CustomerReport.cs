@@ -11,16 +11,16 @@ namespace popilot
 		private readonly AzureDevOps azureDevOps;
 		private readonly Zendesk zendesk;
 		private readonly Productboard productboard;
-		private readonly GraphServiceClient graphClient;
+		private readonly Microsoft365 m365;
 		private readonly IAi ai;
 		private readonly ILogger logger;
 
-		public CustomerReport(AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard, GraphServiceClient graphClient, IAi ai, ILogger logger)
+		public CustomerReport(AzureDevOps azureDevOps, Zendesk zendesk, Productboard productboard, Microsoft365 m365, IAi ai, ILogger logger)
 		{
 			this.azureDevOps = azureDevOps;
 			this.zendesk = zendesk;
 			this.productboard = productboard;
-			this.graphClient = graphClient;
+			this.m365 = m365;
 			this.ai = ai;
 			this.logger = logger;
 		}
@@ -321,11 +321,11 @@ namespace popilot
 								{
 									try
 									{
-										var chat = await graphClient.GetMyChats(topic).FirstAsync();
+										var chat = await m365.GetMyChats(topic).FirstAsync();
 										return new
 										{
 											chat,
-											lastSevenDayMessages = await graphClient
+											lastSevenDayMessages = await m365
 												.GetChatMessages(chat.Id!)
 												.TakeWhile(m => m.CreatedDateTime > DateTime.UtcNow.AddDays(-7))
 												.OrderBy(m => m.CreatedDateTime)
