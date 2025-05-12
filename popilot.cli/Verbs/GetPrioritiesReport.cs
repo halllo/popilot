@@ -180,11 +180,11 @@ namespace popilot.cli.Verbs
 					{
 						string type = w.Type switch
 						{
-							"Epic" => Emoji.Known.Crown,
-							"Feature" => Emoji.Known.GemStone,
-							"Bug" => Emoji.Known.Collision,
-							"User Story" => Emoji.Known.PersonInTuxedo,
-							"Task" => Emoji.Known.CheckMarkButton,
+							"Epic" => "👑",
+							"Feature" => "💎",
+							"Bug" => "💥",
+							"User Story" => "🗣️",
+							"Task" => "📋",
 							_ => w.Type,
 						};
 						string state = w.State switch

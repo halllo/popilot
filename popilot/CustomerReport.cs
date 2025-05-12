@@ -203,7 +203,7 @@ namespace popilot
 							};
 							var ticketStatus = $"<span style=\"color:gray;\">[status:{status}]</span>";
 
-							var ticketProblemId = t.Detailed.ProblemId.HasValue ? $"<span><b>🕵<a href=\"https://{zendeskSubdomain}.zendesk.com/agent/tickets/{t.Detailed.ProblemId}\">{t.Detailed.ProblemId}</a></b></span>" : string.Empty;
+							var ticketProblemId = t.Detailed.ProblemId.HasValue ? $"<span><b>🔍<a href=\"https://{zendeskSubdomain}.zendesk.com/agent/tickets/{t.Detailed.ProblemId}\">{t.Detailed.ProblemId}</a></b></span>" : string.Empty;
 
 							var ticketRequestor = $"<span style=\"color:gray;\">[{t.Requestor} {t.Detailed.CreatedAt:d}]</span>";
 
@@ -260,7 +260,7 @@ namespace popilot
 						await foreach (var problem in problems)
 						{
 							var problemId = (int)problem.Id;
-							var problemLabel = $"<span><b>🕵<a href=\"https://{zendeskSubdomain}.zendesk.com/agent/tickets/{problemId}\">{problemId}</a></b> {problem.Subject}</span>";
+							var problemLabel = $"<span><b>🔍<a href=\"https://{zendeskSubdomain}.zendesk.com/agent/tickets/{problemId}\">{problemId}</a></b> {problem.Subject}</span>";
 
 							var incidentLabels = problemReferences
 								.FirstOrDefault(p => p.Key == problemId)
@@ -302,6 +302,7 @@ namespace popilot
 								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
 								.SelectAwait(async wid => await azureDevOps.GetWorkItems([int.Parse(wid)]))
 								.SelectMany(ws => ws.ToAsyncEnumerable())
+								.Where(w => w.State != "Removed")
 								.OrderBy(w => w.State switch
 								{
 									"Closed" => 0,
@@ -364,8 +365,8 @@ namespace popilot
 										"Epic" => "👑",
 										"Feature" => "💎",
 										"Bug" => "💥",
-										"User Story" => "🤵",
-										"Task" => "✅",
+										"User Story" => "🗣️",
+										"Task" => "📋",
 										_ => w.Type,
 									};
 									string state = w.State switch
@@ -477,8 +478,8 @@ namespace popilot
 							"Epic" => "👑",
 							"Feature" => "💎",
 							"Bug" => "💥",
-							"User Story" => "🤵",
-							"Task" => "✅",
+							"User Story" => "🗣️",
+							"Task" => "📋",
 							_ => w.Type,
 						};
 						string state = w.State switch

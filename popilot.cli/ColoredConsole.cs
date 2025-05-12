@@ -67,11 +67,11 @@ public static class ColoredConsole
 	{
 		string type = workItem.Type switch
 		{
-			"Epic" => Emoji.Known.Crown,
-			"Feature" => Emoji.Known.GemStone,
-			"Bug" => Emoji.Known.Collision,
-			"User Story" => Emoji.Known.PersonInTuxedo,
-			"Task" => Emoji.Known.CheckMarkButton,
+			"Epic" => "👑",
+			"Feature" => "💎",
+			"Bug" => "💥",
+			"User Story" => "🗣️",
+			"Task" => "📋",
 			_ => workItem.Type,
 		};
 		string state = workItem.State switch
