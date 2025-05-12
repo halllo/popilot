@@ -56,19 +56,22 @@ namespace popilot
 			var currentIteration = iterations.Single(i => i.Contains(currentSprint));
 
 			bool childOfParentFeature(IWorkItemDto w) =>
-					w.Type == "User Story"
+				(   w.Type == "User Story"
 				|| (w.Type == "Bug" && w.ParentType == "Feature")
-				|| (w.Type == "Task" && w.ParentType == "Feature");
+				|| (w.Type == "Task" && w.ParentType == "Feature")
+				)
+				&&
+				w.State != "Removed";
 
 
 			var currentIterationWorkItems = await azureDevOps.GetWorkItems(currentIteration, childOfParentFeature);
 			var closedWorkItems = currentIterationWorkItems.Where(w => w.State == "Closed");
 			var fractionClosedWorkItems = (double)closedWorkItems.Count() / currentIterationWorkItems.Count();
-			
-			var currentIterationFeatures = (await azureDevOps.GetWorkItemsOfIterationPath(currentIteration.Key)).Where(w => w.Type == "Feature");
+
+			var currentIterationFeatures = (await azureDevOps.GetWorkItemsOfIterationPath(currentIteration.Key)).Where(w => w.Type == "Feature" && w.State != "Removed");
 			var closedFeatures = currentIterationFeatures.Where(w => w.State == "Closed");
 			var fractionClosedFeatures = (double)closedFeatures.Count() / currentIterationFeatures.Count();
-			
+
 			var committedWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("committed", StringComparer.InvariantCultureIgnoreCase) ?? false);
 			var fractionCommittedWorkItems = (double)committedWorkItems.Count() / currentIterationWorkItems.Count();
 
@@ -83,14 +86,14 @@ namespace popilot
 			var previousIterationWorkItems = previousIteration == null ? [] : await azureDevOps.GetWorkItems(previousIteration, childOfParentFeature);
 			var spilloverWorkItems = currentIterationWorkItems.Where(w => w.ParentTags?.Contains("spillover", StringComparer.InvariantCultureIgnoreCase) ?? false);
 			var fractionSpilloverWorkItems = (double)spilloverWorkItems.Count() / (spilloverWorkItems.Count() + previousIterationWorkItems.Count());
-			
+
 			var spilloverFeatures = currentIterationFeatures.Where(w => w.Tags.Contains("spillover", StringComparer.InvariantCultureIgnoreCase));
-			var previousIterationFeatures = previousIteration == null ? [] : (await azureDevOps.GetWorkItemsOfIterationPath(previousIteration.Key)).Where(w => w.Type == "Feature");
+			var previousIterationFeatures = previousIteration == null ? [] : (await azureDevOps.GetWorkItemsOfIterationPath(previousIteration.Key)).Where(w => w.Type == "Feature" && w.State != "Removed");
 			var fractionSpilloverFeatures = (double)spilloverFeatures.Count() / (spilloverFeatures.Count() + previousIterationFeatures.Count());
 
 			var worked = await azureDevOps.GetWorkItems(currentIteration, w
-				=> (w.Type == "Bug" || w.Type == "Task") 
-				&& w.State == "Closed" 
+				=> (w.Type == "Bug" || w.Type == "Task")
+				&& w.State == "Closed"
 				&& w.RootParentTitle != null
 				&& ((w.Reason != "Obsolete" && w.Reason != "Cut") || (w.CompletedWork ?? 0.0) > 0)
 				&& (w.CompletedWork != null || w.OriginalEstimate != null));
@@ -149,9 +152,10 @@ namespace popilot
 			SprintWork[] SprintWorks
 		);
 
-		public class SprintWork {
+		public class SprintWork
+		{
 			public string Name { get; set; } = null!;
-			public double NonRoadmapWork {get; set; }
+			public double NonRoadmapWork { get; set; }
 			public double RoadmapWork { get; set; }
 		}
 	}
