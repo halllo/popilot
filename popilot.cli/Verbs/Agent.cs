@@ -2,6 +2,7 @@
 using CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Spectre.Console;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
@@ -100,7 +101,86 @@ namespace popilot.cli.Verbs
 								url = newWorkItem.UrlHumanReadable()
 							};
 						}),
+
+					Tool.From(toolName: "AnalyzeRequirement", logInputsAndOutputs: false, tool: [Description("Analyze the requirement.")]
+						async ([Required]string requirement, Tool.Context outerCtx) =>
+						{
+							AnalyzedRequirementPlan? rememberedPlan = null;
+							await agent.Do(
+								task: $"""
+									Create a detailed plan to implement and test this requirement: \"{requirement}\".
+									Here is everything the user has written so far: {string.Concat(outerCtx.GetMessages().Where(m => m.Role == "user").Select(m => m.Text))}
+									""",
+								tools:
+								[
+									Tool.From(toolName: "ask", logInputsAndOutputs: false, tool: [Description("Clarify something by asking the product owner a specific question.")](string specificQuestion, Tool.Context analysisCtx) =>
+									{
+										Console.WriteLine(specificQuestion);
+										var answer = Console.ReadLine();
+										return answer;
+									}),
+									Tool.From(toolName: "present", logInputsAndOutputs: false, tool: [Description("Present the plan.")](AnalyzedRequirementPlan plan, Tool.Context presentCtx) =>
+									{
+										presentCtx.Cancelled = true;
+										Json.Out(plan);
+										rememberedPlan = plan;
+									}),
+								]);
+
+							if (rememberedPlan != null)
+							{
+								return $"Requirement was successfully analyzed. Then plan was presented to the requestor, so dont summarize it again! (Just so you know, this is the plan: {Json.Of(rememberedPlan)}, but dont talk to the user about it again.)";
+							}
+							else
+							{
+								return "Could not analyze requirement.";
+							}
+						}),
 				]);
+		}
+
+		class AnalyzedRequirementPlan
+		{
+			[Description("Short name of the requirement.")]
+			public string Title { get; set; } = null!;
+			public string? Summary { get; set; }
+
+			[Description("With what meaningful and valuable milestones can we interatively and incrementally reach the realization of the requirement?")]
+			public Milestone[] Milestones { get; set; } = null!;
+
+			public class Milestone
+			{
+				[Description("Short name of the milestone.")]
+				public string Title { get; set; } = null!;
+				public string? Description { get; set; }
+
+				[Description("What do we have to do before implementation, to ensure the implementation will succeed?")]
+				public PreparationActivity[] Preparation { get; set; } = null!;
+				public class PreparationActivity
+				{
+					[Description("Short name of the activity.")]
+					public string Title { get; set; } = null!;
+					public string? Description { get; set; }
+				}
+
+				[Description("What do we actually have to implement to reach the next milestone?")]
+				public ImplementationActivity[] Implementation { get; set; } = null!;
+				public class ImplementationActivity
+				{
+					[Description("Short name of the activity.")]
+					public string Title { get; set; } = null!;
+					public string? Description { get; set; }
+				}
+
+				[Description("How can we make sure what we have implemented actually works and gets us to the next milestone?")]
+				public TestingActivity[] Testing { get; set; } = null!;
+				public class TestingActivity
+				{
+					[Description("Short name of the activity.")]
+					public string Title { get; set; } = null!;
+					public string? Description { get; set; }
+				}
+			}
 		}
 	}
 }

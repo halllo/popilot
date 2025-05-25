@@ -38,8 +38,16 @@ Other than that, there are many more commands available.
 
 Delegate work to popilot. Its agent mode will figure out how to combine its many operations smartly to accomplish your goal.
 
+For example it can create your operational tasks, saving you a lot of clicks.
+
 ```bash
 popilot.cli.exe agent "Create a new task for Manuel to 'Refine Backlog' in the next two sprints (after the current sprint) with 20% of his available capacity."
+```
+
+Or it can analyze a new requirement. If it needs to clarify more details, it will just ask you. Then it will presents you a plan containing milestones and activities.
+
+```bash
+popilot.cli.exe agent "please analyze login with microsoft as a new requirement"
 ```
 
 ⚠️ Not all popilot operations are available in agent mode yet.
