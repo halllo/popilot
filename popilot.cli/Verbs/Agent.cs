@@ -84,7 +84,7 @@ namespace popilot.cli.Verbs
 							var selectedSprint = sprints.Single(s => s.Path == normalizedSprintName);
 
 							var (capacities, daysOff) = await azureDevOps.GetCapacities(Project, Team, selectedSprint);
-							var selectedTeamMember = teamMember == null ? null : capacities.TeamMembers.Single(m => m.TeamMember.DisplayName.Contains(teamMember, StringComparison.InvariantCultureIgnoreCase));
+							var selectedTeamMember = teamMember == null ? null : capacities.TeamMembers.SingleOrDefault(m => m.TeamMember.DisplayName.Contains(teamMember, StringComparison.InvariantCultureIgnoreCase));
 
 							var newWorkItem = await azureDevOps.CreateWorkItem(
 								project: Project,
@@ -99,6 +99,25 @@ namespace popilot.cli.Verbs
 							return new {
 								id = newWorkItem.Id,
 								url = newWorkItem.UrlHumanReadable()
+							};
+						}),
+
+					Tool.From([Description("Add tag.")]
+						async ([Required]string workItemId, string tag) =>
+						{
+							if (!Simulate)
+							{
+								var cancelToken = CancellationToken.None;
+								var workItem = (await azureDevOps.GetWorkItems([int.Parse(workItemId)], cancelToken)).Single();
+								if (workItem.Tags.Contains(tag))
+								{
+									await azureDevOps.AddTag(workItem.Id, tag, cancelToken);
+								}
+							}
+							return new
+							{
+								id = workItemId,
+								tag
 							};
 						}),
 
