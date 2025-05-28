@@ -430,6 +430,7 @@ namespace popilot
 									}))
 								)
 								.OrderBy(c => c.Date)
+								.Where(c => !Uri.IsWellFormedUriString(c.Text, UriKind.Absolute))//exclude lonely URLs
 								.ToList();
 
 							const string processSummaryPrompt = "Summarize the progress described in these comments of a support ticket. Be as short and concise as possible. The shorter the better.";

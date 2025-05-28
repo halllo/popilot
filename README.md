@@ -32,6 +32,12 @@ You can get a deployment notification snippet based on your recent deployments t
 popilot.cli.exe get-recent-deployments -p "MyProject" -t "MyTeam" -r "https://link-to-your-release-notes.com" -d
 ```
 
+You can view sprint effort grouped by tags. Tasks also inherit their tags from their parents.
+
+```bash
+popilot.cli.exe get-sprint-effort "Sprints\1" --group-by-tags "Support,Analysis,Dev"
+```
+
 Other than that, there are many more commands available.
 
 ## Agent Mode
