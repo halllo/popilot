@@ -63,7 +63,7 @@ public static class ColoredConsole
 		}
 	}
 
-	public static Markup Display2(AzureDevOps.IWorkItemDto workItem)
+	private static string Display2Core(AzureDevOps.IWorkItemDto workItem)
 	{
 		string type = workItem.Type switch
 		{
@@ -81,7 +81,18 @@ public static class ColoredConsole
 			"Active" => $"[yellow]{workItem.State}[/]",
 			_ => $"[gray]{workItem.State}[/]",
 		};
-		return new Markup($"{type}[link={workItem.UrlHumanReadable()}][gray]{workItem.Id}[/][/] {workItem.Title} [gray][[[/]{state}[gray]]][/]");
+		return $"{type}[link={workItem.UrlHumanReadable()}][gray]{workItem.Id}[/][/] {workItem.Title} [gray][[[/]{state}[gray]]][/]";
+	}
+
+	public static Markup Display2(AzureDevOps.IWorkItemDto workItem)
+	{
+		return new Markup(Display2Core(workItem));
+	}
+
+	public static Markup Display2WithRemainingWork(AzureDevOps.IWorkItemDto workItem)
+	{
+		var remainingWork = workItem.RemainingWork != null ? $" [bold]{workItem.RemainingWork}h[/]" : string.Empty;
+		return new Markup(Display2Core(workItem) + remainingWork);
 	}
 
 	public static void Display<T>(IBidirectionalGraph<T, IEdge<T>> tree, T root, Func<T, Markup> displayName) where T : notnull

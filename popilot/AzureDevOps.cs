@@ -487,6 +487,7 @@ namespace popilot
 				directWorkItem.ParentTitle = parent?.Title;
 				directWorkItem.ParentType = parent?.Type;
 				directWorkItem.ParentTags = parent?.Tags;
+				directWorkItem.Parents = new[] { parent, parentParent, parentParentParent }.Where(i => i != null).Select(i => i!).ToArray();
 				directWorkItem.RootParentTitle = (parentParentParent ?? parentParent ?? parent)?.Title;
 				directWorkItem.RootParentTargetDate = (parentParentParent ?? parentParent ?? parent ?? directWorkItem).TargetDate;
 				directWorkItem.RootParentState = (parentParentParent ?? parentParent ?? parent ?? directWorkItem).State;
@@ -570,6 +571,7 @@ namespace popilot
 			string? RootParentTitle { get; }
 			DateTime? RootParentTargetDate { get; }
 			string? RootParentState { get; }
+			IWorkItemDto[] Parents { get; }
 			int[] ChildrenIds { get; }
 			string Url { get; }
 		}
@@ -605,6 +607,7 @@ namespace popilot
 			public string? RootParentTitle { get; set; }
 			public DateTime? RootParentTargetDate { get; set; }
 			public string? RootParentState { get; set; }
+			public IWorkItemDto[] Parents { get; set; } = null!;
 			public int[] ChildrenIds { get; set; } = null!;
 			public string Url { get; set; } = null!;
 		}
