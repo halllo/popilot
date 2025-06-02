@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using Microsoft.Graph;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -542,13 +541,6 @@ namespace popilot
 				public Productboard.Note Detailed { get; internal set; } = null!;
 				public Productboard.Company Company { get; internal set; } = null!;
 			}
-		}
-
-		private class InvariantCultureIgnoreCaseComparer : IEqualityComparer<string>
-		{
-			public bool Equals(string? x, string? y) => string.Equals(x, y, StringComparison.InvariantCultureIgnoreCase);
-			public int GetHashCode(string obj) => obj.GetHashCode();
-			public static IEqualityComparer<string> Instance { get; } = new InvariantCultureIgnoreCaseComparer();
 		}
 	}
 }

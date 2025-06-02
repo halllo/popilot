@@ -16,22 +16,25 @@ namespace popilot.cli.Verbs
 		public bool DisplayWorkItems { get; set; }
 
 		[Value(0, MetaName = "sprint path", Required = false)]
-		public string? Path { get; set; }
+		public string? IterationPath { get; set; }
 		[Option(longName: "skip-sprints", Required = false)]
 		public int SkipSprints { get; set; }
 
-		[Option('p', longName: "group-by-tags", HelpText = "Comma seperated list of tags to group by.", Required = false)]
+		[Option(longName: "group-by-tags", HelpText = "Comma separated list of tags to group by.", Required = false)]
 		public string? GoupByTags { get; set; }
+
+		[Option(longName: "tag-filter", HelpText = "Comma separated list of tags to filter by.", Required = false)]
+		public string? TagFilter { get; set; }
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetSprintEffort> logger)
 		{
 			List<AzureDevOps.IWorkItemDto> workItems = [];
-			if (!string.IsNullOrWhiteSpace(Path))
+			if (!string.IsNullOrWhiteSpace(IterationPath))
 			{
-				var sprints = await azureDevOps.GetIterationsUnder(Path, Project, Team);
+				var sprints = await azureDevOps.GetIterationsUnder(IterationPath, Project, Team);
 				if (!sprints.Any())
 				{
-					logger.LogError("Sprint {Path} not found.", Path);
+					logger.LogError("Sprint {Path} not found.", IterationPath);
 					return;
 				}
 
@@ -55,7 +58,7 @@ namespace popilot.cli.Verbs
 				}
 			}
 
-			AnsiConsole.MarkupLine("[bold]Total Effort[/]");
+			AnsiConsole.MarkupLine($"[bold]Total Effort[/][gray]{(!string.IsNullOrEmpty(TagFilter) ? $" filtered by tag '{TagFilter}'" : string.Empty)}[/]");
 			GetEffort(azureDevOps, workItems);
 		}
 
@@ -69,6 +72,7 @@ namespace popilot.cli.Verbs
 		private void GetEffort(AzureDevOps azureDevOps, IReadOnlyCollection<AzureDevOps.IWorkItemDto> workItems)
 		{
 			var groups = GoupByTags?.Split(",", StringSplitOptions.RemoveEmptyEntries);
+			var filters = TagFilter?.Split(",", StringSplitOptions.RemoveEmptyEntries) ?? [];
 			var workItemGroups = workItems
 				.OrderBy(wi => wi.StackRank)
 				.Select(wi => new
@@ -80,8 +84,12 @@ namespace popilot.cli.Verbs
 				{
 					wi.workitem,
 					wi.tags,
-					group = (groups ?? []).Intersect(wi.tags).FirstOrDefault() ?? null,
+					group = (groups ?? []).Intersect(wi.tags, InvariantCultureIgnoreCaseComparer.Instance).FirstOrDefault() ?? null,
 				})
+				.WhereIf(filters.Any(), wi => filters.All(f => f.StartsWith("!") 
+					? !wi.tags.Contains(f.Substring(1), InvariantCultureIgnoreCaseComparer.Instance)
+					: wi.tags.Contains(f, InvariantCultureIgnoreCaseComparer.Instance)
+				))
 				.GroupBy(wi => wi.group, wi => wi.workitem)
 				.OrderBy(wig => wig.Key)
 				.ToList();
