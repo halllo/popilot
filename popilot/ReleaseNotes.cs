@@ -1,4 +1,5 @@
-﻿using Microsoft.TeamFoundation.Work.WebApi;
+﻿using Microsoft.TeamFoundation.Core.WebApi.Types;
+using Microsoft.TeamFoundation.Work.WebApi;
 using System.Text;
 using System.Text.RegularExpressions;
 using static popilot.AzureDevOps;
@@ -26,7 +27,15 @@ namespace popilot
 			return new HierarchicalReleaseNotesWorkItems(root, releaseNotess);
 		}
 
-		public async Task<IReleaseNotesWorkItems> OfRecentClosings(string? project, string? team, string? iterationPath = null, Regex? iterationPathFilter = null, int? take = null, CancellationToken cancellationToken = default)
+		public async Task<IReleaseNotesWorkItems> OfRecentClosings(
+			string? project,
+			string? team,
+			string? iterationPath = null,
+			Regex? iterationPathFilter = null,
+			string? areaPath = null,
+			Regex? areaPathFilter = null,
+			int? take = null,
+			CancellationToken cancellationToken = default)
 		{
 			var filteredIterationReferences = (await azureDevOps.GetAllIterations(project, team, iterationPath, iterationPathFilter, cancellationToken))
 				.Where(i => i.Attributes.TimeFrame == TimeFrame.Current || i.Attributes.TimeFrame == TimeFrame.Past)
@@ -34,9 +43,15 @@ namespace popilot
 
 			var iterations = await azureDevOps.GetIterationsWithCompletedWorkItems(project, team, filteredIterationReferences, cancellationToken: cancellationToken);
 
+			var area = areaPath == null
+				? null
+				: (await azureDevOps.GetAllAreas(project, team, areaPath, areaPathFilter, cancellationToken))
+				.First();//there is no API to get the default area path of a team, so we assume it is the first.
+
 			var closingDays = iterations
 				.Reverse()
 				.SelectMany(i => i.WorkItems)
+				.WhereIf(area != null, w => w.AreaPath == area)
 				.GroupBy(w => (DateOnly?)(w.ClosedDate.HasValue ? DateOnly.FromDateTime(w.ClosedDate.Value) : null))
 				.OrderByDescending(d => d.Key)
 				.Select(g => new WorkItemsGroup

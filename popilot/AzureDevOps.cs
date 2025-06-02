@@ -651,9 +651,9 @@ namespace popilot
 			return iterations;
 		}
 
-		public async Task<IReadOnlyList<string>> GetAllAreas(string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<string>> GetAllAreas(string? project = null, string? team = null, string? path = null, Regex? pathFilter = null, CancellationToken cancellationToken = default)
 		{
-			var areas = await GetAllClassificationNodesFlat(TreeStructureGroup.Areas, project, team, cancellationToken: cancellationToken);
+			var areas = await GetAllClassificationNodesFlat(TreeStructureGroup.Areas, project, team, path, pathFilter, cancellationToken: cancellationToken);
 			var areaPaths = areas
 				.Select(a => a.Path.Replace("\\Area\\", "\\", StringComparison.InvariantCultureIgnoreCase).TrimStart('\\'))
 				.ToList();
