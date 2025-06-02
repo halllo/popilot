@@ -729,10 +729,16 @@ namespace popilot
 
 		public async Task<TeamSettingsIteration?> GetIteration(string path, string? project = null, string? team = null, CancellationToken cancellationToken = default)
 		{
+			var iterations = await GetIterationsUnder(path, project, team, cancellationToken);
+			return iterations.SingleOrDefault();
+		}
+
+		public async Task<IReadOnlyList<TeamSettingsIteration>> GetIterationsUnder(string path, string? project = null, string? team = null, CancellationToken cancellationToken = default)
+		{
 			await this.Init();
 			var iterations = await GetIterations(project, team, cancellationToken);
-			var iteration = iterations.Where(i => i.Path.StartsWith(path)).SingleOrDefault();
-			return iteration;
+			var iterationsOfPath = iterations.Where(i => i.Path.StartsWith(path)).ToList();
+			return iterationsOfPath;
 		}
 
 		public Task<IReadOnlyCollection<IWorkItemDto>> GetWorkItems(TeamSettingsIteration iteration, CancellationToken cancellationToken = default)
