@@ -1,5 +1,4 @@
-﻿using Microsoft.TeamFoundation.Core.WebApi.Types;
-using Microsoft.TeamFoundation.Work.WebApi;
+﻿using Microsoft.TeamFoundation.Work.WebApi;
 using System.Text;
 using System.Text.RegularExpressions;
 using static popilot.AzureDevOps;
@@ -42,16 +41,13 @@ namespace popilot
 				.TakeLast(take ?? 10);
 
 			var iterations = await azureDevOps.GetIterationsWithCompletedWorkItems(project, team, filteredIterationReferences, cancellationToken: cancellationToken);
-
-			var area = areaPath == null
-				? null
-				: (await azureDevOps.GetAllAreas(project, team, areaPath, areaPathFilter, cancellationToken))
-				.First();//there is no API to get the default area path of a team, so we assume it is the first.
+			
+			var areas = areaPath == null ? [] : await azureDevOps.GetAllAreas(project, team, areaPath, areaPathFilter, cancellationToken);
 
 			var closingDays = iterations
 				.Reverse()
 				.SelectMany(i => i.WorkItems)
-				.WhereIf(area != null, w => w.AreaPath == area)
+				.WhereIf(areas.Any(), w => areas.Contains(w.AreaPath))
 				.GroupBy(w => (DateOnly?)(w.ClosedDate.HasValue ? DateOnly.FromDateTime(w.ClosedDate.Value) : null))
 				.OrderByDescending(d => d.Key)
 				.Select(g => new WorkItemsGroup
