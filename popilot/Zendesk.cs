@@ -344,6 +344,20 @@ namespace popilot
 			return userResponse;
 		}
 
+		public async Task<JsonElement?> GetHelpcenterSectionTranslationsRaw(long id)
+		{
+			var nextPage = $"v2/help_center/sections/{id}/translations.json";
+			var responseNextPage = await http.GetAsync(nextPage);
+			if (!responseNextPage.IsSuccessStatusCode)
+			{
+				var content = await responseNextPage.Content.ReadAsStringAsync();
+				throw new ZendeskFetchException(content);
+			}
+
+			var userResponse = await responseNextPage.Content.ReadFromJsonAsync<JsonElement>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+			return userResponse;
+		}
+
 
 
 

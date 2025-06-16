@@ -52,6 +52,8 @@ namespace popilot.cli.Verbs
 				{
 					var section = await zendesk.GetHelpcenterSectionRaw(long.Parse(Section));
 					Json.Out(section);
+					var translations = await zendesk.GetHelpcenterSectionTranslationsRaw(long.Parse(Section));
+					Json.Out(translations);
 				}
 				else if (!string.IsNullOrWhiteSpace(Category))
 				{
