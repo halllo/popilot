@@ -32,6 +32,14 @@ namespace popilot
 				return source;
 		}
 
+		public static IEnumerable<T> TakeIf<T>(this IEnumerable<T> source, bool condition, int take)
+		{
+			if (condition)
+				return source.Take(take);
+			else
+				return source;
+		}
+
 		public static IEnumerable<T> Unfold<T>(this IEnumerable<T> items, Func<T, IEnumerable<T>?> childrenSelector) where T : class
 		{
 			foreach (var item in items)

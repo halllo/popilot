@@ -19,12 +19,17 @@ namespace popilot.cli.Verbs
 		public string? IterationPath { get; set; }
 		[Option(longName: "skip-sprints", Required = false)]
 		public int SkipSprints { get; set; }
+		[Option(longName: "take-sprints", Required = false)]
+		public int? TakeSprints { get; set; }
 
 		[Option(longName: "group-by-tags", HelpText = "Comma separated list of tags to group by.", Required = false)]
 		public string? GoupByTags { get; set; }
 
 		[Option(longName: "tag-filter", HelpText = "Comma separated list of tags to filter by.", Required = false)]
 		public string? TagFilter { get; set; }
+
+		[Option(longName: "ignore-unparented", Required = false)]
+		public bool IgnoreUnparented { get; set; }
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetSprintEffort> logger)
 		{
@@ -38,7 +43,7 @@ namespace popilot.cli.Verbs
 					return;
 				}
 
-				foreach (var sprint in sprints.Skip(SkipSprints))
+				foreach (var sprint in sprints.Skip(SkipSprints).TakeIf(TakeSprints.HasValue, TakeSprints ?? 0))
 				{
 					logger.LogInformation("Sprint {Name} from {Start:dd.MM.yyyy} to {Finish:dd.MM.yyyy}", sprint.Name, sprint.Attributes.StartDate, sprint.Attributes.FinishDate);
 					workItems.AddRange(await GetEffort(azureDevOps, sprint));
@@ -50,7 +55,8 @@ namespace popilot.cli.Verbs
 				var sprints = await azureDevOps.GetIterations(Project, Team);
 				foreach (var sprint in sprints
 					.Where(s => s.Attributes.TimeFrame != Microsoft.TeamFoundation.Work.WebApi.TimeFrame.Past)
-					.Skip(SkipSprints))
+					.Skip(SkipSprints)
+					.TakeIf(TakeSprints.HasValue, TakeSprints ?? 0))
 				{
 					logger.LogInformation("Sprint {Name} from {Start:dd.MM.yyyy} to {Finish:dd.MM.yyyy}", sprint.Name, sprint.Attributes.StartDate, sprint.Attributes.FinishDate);
 					workItems.AddRange(await GetEffort(azureDevOps, sprint));
@@ -75,6 +81,7 @@ namespace popilot.cli.Verbs
 			var filters = TagFilter?.Split(",", StringSplitOptions.RemoveEmptyEntries) ?? [];
 			var workItemGroups = workItems
 				.OrderBy(wi => wi.StackRank)
+				.WhereIf(IgnoreUnparented, wi => wi.ParentId != null)
 				.Select(wi => new
 				{
 					workitem = wi,
