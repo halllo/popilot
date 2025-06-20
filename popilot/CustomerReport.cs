@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -224,6 +225,8 @@ namespace popilot
 					html.AppendLine($"<h4>Problems</h4>");
 					{
 						var workItemCatcher = new Regex("https\\:\\/\\/dev\\.azure\\.com.*?/edit/(?<wid>\\d*?)(\\s|$)", RegexOptions.Singleline | RegexOptions.Compiled);
+						var ignoreWorkItemCatcher = new Regex("Ignore https\\:\\/\\/dev\\.azure\\.com.*?/edit/(?<wid>\\d*?)(\\s|$)", RegexOptions.Singleline | RegexOptions.Compiled);
+						var dontIgnoreWorkItemCatcher = new Regex("Dont ignore https\\:\\/\\/dev\\.azure\\.com.*?/edit/(?<wid>\\d*?)(\\s|$)", RegexOptions.Singleline | RegexOptions.Compiled);
 						var groupChatCatcher = new Regex("groupchat:(?<topic>.*)", RegexOptions.Compiled);
 
 						html.AppendLine($"<table>");
@@ -295,8 +298,21 @@ namespace popilot
 								.Skip(1)//we ignore the initial comment because it is the problem description
 								.ToListAsync();
 
+							var ignorableWorkItems = zendeskComments
+								.SelectMany(c => ignoreWorkItemCatcher.Matches(c.PlainBody).Select(m => m.Groups["wid"].Value))
+								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
+								.Select(wid => int.Parse(wid))
+								.ToHashSet();
+
+							var notIgnorableWorkItems = zendeskComments
+								.SelectMany(c => dontIgnoreWorkItemCatcher.Matches(c.PlainBody).Select(m => m.Groups["wid"].Value))
+								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
+								.Select(wid => int.Parse(wid))
+								.ToHashSet();
+
 							var workItems = await zendeskComments
 								.SelectMany(c => workItemCatcher.Matches(c.PlainBody).Select(m => m.Groups["wid"].Value))
+								.Except(ignorableWorkItems.Except(notIgnorableWorkItems).Select(i => i.ToString()))
 								.ToAsyncEnumerable()
 								.Distinct(InvariantCultureIgnoreCaseComparer.Instance)
 								.SelectAwait(async wid => await azureDevOps.GetWorkItems([int.Parse(wid)]))
