@@ -33,7 +33,7 @@ namespace popilot.cli.Verbs
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetSprintEffort> logger)
 		{
-			List<AzureDevOps.IWorkItemDto> workItems = [];
+			List<SprintEfforts> sprintEfforts = [];
 			if (!string.IsNullOrWhiteSpace(IterationPath))
 			{
 				var sprints = await azureDevOps.GetIterationsUnder(IterationPath, Project, Team);
@@ -45,8 +45,8 @@ namespace popilot.cli.Verbs
 
 				foreach (var sprint in sprints.Skip(SkipSprints).TakeIf(TakeSprints.HasValue, TakeSprints ?? 0))
 				{
-					logger.LogInformation("Sprint {Name} from {Start:dd.MM.yyyy} to {Finish:dd.MM.yyyy}", sprint.Name, sprint.Attributes.StartDate, sprint.Attributes.FinishDate);
-					workItems.AddRange(await GetEffort(azureDevOps, sprint));
+					AnsiConsole.MarkupLine($"[bold]Sprint {sprint.Name}[/][gray] from {sprint.Attributes.StartDate:dd.MM.yyyy} to {sprint.Attributes.FinishDate:dd.MM.yyyy}[/]");
+					sprintEfforts.Add(await GetEffort(azureDevOps, sprint));
 					Console.WriteLine();
 				}
 			}
@@ -58,24 +58,30 @@ namespace popilot.cli.Verbs
 					.Skip(SkipSprints)
 					.TakeIf(TakeSprints.HasValue, TakeSprints ?? 0))
 				{
-					logger.LogInformation("Sprint {Name} from {Start:dd.MM.yyyy} to {Finish:dd.MM.yyyy}", sprint.Name, sprint.Attributes.StartDate, sprint.Attributes.FinishDate);
-					workItems.AddRange(await GetEffort(azureDevOps, sprint));
+					AnsiConsole.MarkupLine($"[bold]Sprint {sprint.Name}[/][gray] from {sprint.Attributes.StartDate:dd.MM.yyyy} to {sprint.Attributes.FinishDate:dd.MM.yyyy}[/]");
+					sprintEfforts.Add(await GetEffort(azureDevOps, sprint));
 					Console.WriteLine();
 				}
 			}
 
 			AnsiConsole.MarkupLine($"[bold]Total Effort[/][gray]{(!string.IsNullOrEmpty(TagFilter) ? $" filtered by tag '{TagFilter}'" : string.Empty)}[/]");
-			GetEffort(azureDevOps, workItems);
+			var all = sprintEfforts.Select(s => s.EffortGroups).Sum(g => g.All);
+			foreach (var effortGroup in sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(e => e.Name))
+			{
+				AnsiConsole.MarkupLine($"{effortGroup.Key} [gray]part[/] {effortGroup.Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Sum(g => g.Part) / all:P0}[/]");
+			}
 		}
 
-		private async Task<IReadOnlyCollection<AzureDevOps.IWorkItemDto>> GetEffort(AzureDevOps azureDevOps, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration sprint)
+		private async Task<SprintEfforts> GetEffort(AzureDevOps azureDevOps, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration sprint)
 		{
 			var workItems = await azureDevOps.GetWorkItems(sprint);
-			GetEffort(azureDevOps, workItems);
-			return workItems;
+			var effortGroups = GetEffort(azureDevOps, workItems, past: sprint.Attributes.TimeFrame == Microsoft.TeamFoundation.Work.WebApi.TimeFrame.Past);
+			return new SprintEfforts(sprint, effortGroups);
 		}
 
-		private void GetEffort(AzureDevOps azureDevOps, IReadOnlyCollection<AzureDevOps.IWorkItemDto> workItems)
+		record SprintEfforts(Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration sprint, EffortGroups EffortGroups);
+
+		private EffortGroups GetEffort(AzureDevOps azureDevOps, IReadOnlyCollection<AzureDevOps.IWorkItemDto> workItems, bool past)
 		{
 			var groups = GoupByTags?.Split(",", StringSplitOptions.RemoveEmptyEntries);
 			var filters = TagFilter?.Split(",", StringSplitOptions.RemoveEmptyEntries) ?? [];
@@ -93,7 +99,7 @@ namespace popilot.cli.Verbs
 					wi.tags,
 					group = (groups ?? []).Intersect(wi.tags, InvariantCultureIgnoreCaseComparer.Instance).FirstOrDefault() ?? null,
 				})
-				.WhereIf(filters.Any(), wi => filters.All(f => f.StartsWith("!") 
+				.WhereIf(filters.Any(), wi => filters.All(f => f.StartsWith("!")
 					? !wi.tags.Contains(f.Substring(1), InvariantCultureIgnoreCaseComparer.Instance)
 					: wi.tags.Contains(f, InvariantCultureIgnoreCaseComparer.Instance)
 				))
@@ -105,12 +111,22 @@ namespace popilot.cli.Verbs
 			var allOriginalEstimate = allWorkItems.Sum(wi => wi.OriginalEstimate ?? 0);
 			var allRemainingWork = allWorkItems.Sum(wi => wi.RemainingWork ?? 0);
 			var allCompletedWork = allWorkItems.Sum(wi => wi.CompletedWork ?? 0);
+			var effortGroups = new List<EffortGroup>();
 			foreach (var wig in workItemGroups)
 			{
 				var originalEstimate = wig.Sum(wi => wi.OriginalEstimate ?? 0);
 				var remainingWork = wig.Sum(wi => wi.RemainingWork ?? 0);
 				var completedWork = wig.Sum(wi => wi.CompletedWork ?? 0);
-				AnsiConsole.MarkupLine($"{wig.Key ?? "<no group>"} [gray]remaining[/] {remainingWork}h [gray](estimated[/] {originalEstimate}h [magenta]{originalEstimate / allOriginalEstimate:P0}[/][gray])[/]");
+				if (past)
+				{
+					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", completedWork));
+					AnsiConsole.MarkupLine($"{wig.Key ?? "<no group>"} [gray]completed[/] {completedWork}h [gray]([/][magenta]{completedWork / allCompletedWork:P0}[/][gray])[/]");
+				}
+				else
+				{
+					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", remainingWork));
+					AnsiConsole.MarkupLine($"{wig.Key ?? "<no group>"} [gray]remaining[/] {remainingWork}h [gray](estimated[/] {originalEstimate}h [magenta]{originalEstimate / allOriginalEstimate:P0}[/][gray])[/]");
+				}
 				if (DisplayWorkItems)
 				{
 					foreach (var wi in wig)
@@ -121,6 +137,11 @@ namespace popilot.cli.Verbs
 					AnsiConsole.WriteLine();
 				}
 			}
+
+			return new EffortGroups(past ? allCompletedWork : allRemainingWork, effortGroups);
 		}
+
+		record EffortGroups(double All, List<EffortGroup> Groups);
+		record EffortGroup(string Name, double Part);
 	}
 }
