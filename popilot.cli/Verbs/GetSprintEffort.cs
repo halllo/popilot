@@ -65,11 +65,25 @@ namespace popilot.cli.Verbs
 			}
 
 			AnsiConsole.MarkupLine($"[bold]Total Effort[/][gray]{(!string.IsNullOrEmpty(TagFilter) ? $" filtered by tag '{TagFilter}'" : string.Empty)}[/]");
+			var table = new Table();
+			table.ShowRowSeparators();
+			table.BorderColor(Color.Grey);
+			table.AddColumn($"");
 			var all = sprintEfforts.Select(s => s.EffortGroups).Sum(g => g.All);
+			double effort(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Part);
+			var areas = sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(g => g.Area).ToList();
+			foreach (var area in areas)
+			{
+				table.AddColumn($"[bold]{area.Key}[/]\n{effort(area.Key)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effort(area.Key) / all:P0}[/]");
+			}
 			foreach (var effortGroup in sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(e => e.Name))
 			{
-				AnsiConsole.MarkupLine($"{effortGroup.Key} [gray]part[/] {effortGroup.Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Sum(g => g.Part) / all:P0}[/]");
+				table.AddRow([
+					new Markup($"[bold]{effortGroup.Key}[/]\n{effortGroup.Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Sum(g => g.Part) / all:P0}[/]"),
+					..areas.Select(area => new Markup($"{effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Part) / all:P0}[/]"))
+				]);
 			}
+			AnsiConsole.Write(table);
 		}
 
 		private async Task<SprintEfforts> GetEffort(AzureDevOps azureDevOps, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration sprint)
@@ -108,25 +122,56 @@ namespace popilot.cli.Verbs
 				.ToList();
 
 			var allWorkItems = workItemGroups.SelectMany(g => g);
-			var allOriginalEstimate = allWorkItems.Sum(wi => wi.OriginalEstimate ?? 0);
-			var allRemainingWork = allWorkItems.Sum(wi => wi.RemainingWork ?? 0);
-			var allCompletedWork = allWorkItems.Sum(wi => wi.CompletedWork ?? 0);
+			double allOriginalEstimate(string? area = null) => allWorkItems.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.OriginalEstimate ?? 0);
+			double allRemainingWork(string? area = null) => allWorkItems.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.RemainingWork ?? 0);
+			double allCompletedWork(string? area = null) => allWorkItems.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.CompletedWork ?? 0);
+
+			var table = new Table();
+			table.ShowRowSeparators();
+			table.BorderColor(Color.Grey);
+			table.AddColumn(past
+				? $"{allCompletedWork()}h"
+				: $"{allRemainingWork()}h");
+
+			var areas = workItems
+				.GroupBy(workItems => workItems.AreaPath)
+				.Select(g => new
+				{
+					Area = g.Key,
+					WorkItems = g.ToList(),
+				})
+				.OrderBy(g => g.Area)
+				.Select(g => g.Area)
+				.ToList();
+
+			foreach (var area in areas)
+			{
+				table.AddColumn(past
+					? $"[bold]{area}[/]\n[gray]comp[/] {allCompletedWork(area)}h[gray],[/] [magenta]{allCompletedWork(area) / allCompletedWork():P0}[/]"
+					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{allOriginalEstimate(area) / allOriginalEstimate():P0}[/]");
+			}
+
 			var effortGroups = new List<EffortGroup>();
 			foreach (var wig in workItemGroups)
 			{
-				var originalEstimate = wig.Sum(wi => wi.OriginalEstimate ?? 0);
-				var remainingWork = wig.Sum(wi => wi.RemainingWork ?? 0);
-				var completedWork = wig.Sum(wi => wi.CompletedWork ?? 0);
-				if (past)
+				double originalEstimate(string? area = null) => wig.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.OriginalEstimate ?? 0);
+				double remainingWork(string? area = null) => wig.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.RemainingWork ?? 0);
+				double completedWork(string? area = null) => wig.Where(w => area == null || w.AreaPath == area).Sum(wi => wi.CompletedWork ?? 0);
+
+				foreach (var area in areas)
 				{
-					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", completedWork));
-					AnsiConsole.MarkupLine($"{wig.Key ?? "<no group>"} [gray]completed[/] {completedWork}h [gray]([/][magenta]{completedWork / allCompletedWork:P0}[/][gray])[/]");
+					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, past ? completedWork(area) : remainingWork(area)));
 				}
-				else
-				{
-					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", remainingWork));
-					AnsiConsole.MarkupLine($"{wig.Key ?? "<no group>"} [gray]remaining[/] {remainingWork}h [gray](estimated[/] {originalEstimate}h [magenta]{originalEstimate / allOriginalEstimate:P0}[/][gray])[/]");
-				}
+
+				table.AddRow([
+					new Markup(past
+						? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [magenta]{completedWork() / allCompletedWork():P0}[/]"
+						: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{originalEstimate() / allOriginalEstimate():P0}[/]"),
+					..areas.Select(area => new Markup(past
+						? $"[gray]comp[/] {completedWork(area)}h[gray],[/] [magenta]{completedWork(area) / allCompletedWork():P0}[/]"
+						: $"[gray]rem[/] {remainingWork(area)}h[gray], est[/] {originalEstimate(area)}h[gray],[/] [magenta]{originalEstimate(area) / allOriginalEstimate():P0}[/]"))
+				]);
+
 				if (DisplayWorkItems)
 				{
 					foreach (var wi in wig)
@@ -137,11 +182,12 @@ namespace popilot.cli.Verbs
 					AnsiConsole.WriteLine();
 				}
 			}
+			AnsiConsole.Write(table);
 
-			return new EffortGroups(past ? allCompletedWork : allRemainingWork, effortGroups);
+			return new EffortGroups(past ? allCompletedWork() : allRemainingWork(), effortGroups);
 		}
 
 		record EffortGroups(double All, List<EffortGroup> Groups);
-		record EffortGroup(string Name, double Part);
+		record EffortGroup(string Name, string Area, double Part);
 	}
 }
