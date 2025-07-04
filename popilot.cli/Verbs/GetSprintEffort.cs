@@ -146,9 +146,10 @@ namespace popilot.cli.Verbs
 
 			foreach (var area in areas)
 			{
-				table.AddColumn(past
+				var columnHeaderMarkup = past
 					? $"[bold]{area}[/]\n[gray]comp[/] {allCompletedWork(area)}h[gray],[/] [magenta]{allCompletedWork(area) / allCompletedWork():P0}[/]"
-					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{allOriginalEstimate(area) / allOriginalEstimate():P0}[/]");
+					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{allOriginalEstimate(area) / allOriginalEstimate():P0}[/]";
+				table.AddColumn(columnHeaderMarkup);
 			}
 
 			var effortGroups = new List<EffortGroup>();
@@ -163,17 +164,33 @@ namespace popilot.cli.Verbs
 					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, past ? completedWork(area) : remainingWork(area)));
 				}
 
+				var rowHeaderMarkup = past
+					? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [magenta]{completedWork() / allCompletedWork():P0}[/]"
+					: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{originalEstimate() / allOriginalEstimate():P0}[/]";
+
+				string cellMarkup(string area)
+				{
+					double comp = completedWork(area);
+					double compAll = allCompletedWork();
+					double rem = remainingWork(area);
+					double org = originalEstimate(area);
+					double orgAll = allOriginalEstimate();
+					double compPercent = comp / compAll;
+					double orgPercent = org / orgAll;
+					string percentColor = compPercent > orgPercent ? "red" : compPercent < orgPercent ? "green" : "white";
+					return past
+						? $"[gray]comp[/] {comp}h[gray],[/] [{percentColor}]{compPercent:P0}[/] [gray](est {orgPercent:P0})[/]"
+						: $"[gray]rem[/] {rem}h[gray], est[/] {org}h[gray],[/] [magenta]{orgPercent:P0}[/]";
+				}
+
 				table.AddRow([
-					new Markup(past
-						? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [magenta]{completedWork() / allCompletedWork():P0}[/]"
-						: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{originalEstimate() / allOriginalEstimate():P0}[/]"),
-					..areas.Select(area => new Markup(past
-						? $"[gray]comp[/] {completedWork(area)}h[gray],[/] [magenta]{completedWork(area) / allCompletedWork():P0}[/]"
-						: $"[gray]rem[/] {remainingWork(area)}h[gray], est[/] {originalEstimate(area)}h[gray],[/] [magenta]{originalEstimate(area) / allOriginalEstimate():P0}[/]"))
+					new Markup(rowHeaderMarkup),
+					..areas.Select(area => new Markup(cellMarkup(area)))
 				]);
 
 				if (DisplayWorkItems)
 				{
+					AnsiConsole.MarkupLine(rowHeaderMarkup);
 					foreach (var wi in wig)
 					{
 						AnsiConsole.Write(Display2WithRemainingWork(wi));
