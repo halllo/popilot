@@ -146,9 +146,12 @@ namespace popilot.cli.Verbs
 
 			foreach (var area in areas)
 			{
+				double columnCompPercent = allCompletedWork(area) / allCompletedWork();
+				double columnOrgPercent = allOriginalEstimate(area) / allOriginalEstimate();
+				string columnPercentColor = columnCompPercent > columnOrgPercent ? "red" : columnCompPercent < columnOrgPercent ? "green" : "white";
 				var columnHeaderMarkup = past
-					? $"[bold]{area}[/]\n[gray]comp[/] {allCompletedWork(area)}h[gray],[/] [magenta]{allCompletedWork(area) / allCompletedWork():P0}[/]"
-					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{allOriginalEstimate(area) / allOriginalEstimate():P0}[/]";
+					? $"[bold]{area}[/]\n[gray]comp[/] {allCompletedWork(area)}h[gray],[/] [{columnPercentColor}]{columnCompPercent:P0}[/] [gray](est {columnOrgPercent:P0})[/]"
+					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{columnOrgPercent:P0}[/]";
 				table.AddColumn(columnHeaderMarkup);
 			}
 
@@ -164,9 +167,12 @@ namespace popilot.cli.Verbs
 					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, past ? completedWork(area) : remainingWork(area)));
 				}
 
+				double rowCompPercent = completedWork() / allCompletedWork();
+				double rowOrgPercent = originalEstimate() / allOriginalEstimate();
+				string rowPercentColor = rowCompPercent > rowOrgPercent ? "red" : rowCompPercent < rowOrgPercent ? "green" : "white";
 				var rowHeaderMarkup = past
-					? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [magenta]{completedWork() / allCompletedWork():P0}[/]"
-					: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{originalEstimate() / allOriginalEstimate():P0}[/]";
+					? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [{rowPercentColor}]{rowCompPercent:P0}[/] [gray](est {rowOrgPercent:P0})[/]"
+					: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{rowOrgPercent:P0}[/]";
 
 				string cellMarkup(string area)
 				{
