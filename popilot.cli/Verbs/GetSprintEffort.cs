@@ -70,17 +70,36 @@ namespace popilot.cli.Verbs
 			table.BorderColor(Color.Grey);
 			table.AddColumn($"");
 			var all = sprintEfforts.Select(s => s.EffortGroups).Sum(g => g.All);
-			double effort(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Part);
+			double effortCompleted(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Completed);
+			double effortEstimated(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Estimated);
 			var areas = sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(g => g.Area).ToList();
 			foreach (var area in areas)
 			{
-				table.AddColumn($"[bold]{area.Key}[/]\n{effort(area.Key)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effort(area.Key) / all:P0}[/]");
+				var completedPercent = effortCompleted(area.Key) / all;
+				var estimatedPercent = effortEstimated(area.Key) / all;
+				string percentColor = completedPercent > estimatedPercent ? "red" : completedPercent < estimatedPercent ? "green" : "white";
+				table.AddColumn($"[bold]{area.Key}[/]\n{effortCompleted(area.Key)}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray](est {estimatedPercent:P0})[/]");
 			}
 			foreach (var effortGroup in sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(e => e.Name))
 			{
+				var rowCompleted = effortGroup.Sum(g => g.Completed);
+				var rowCompletedPercent = rowCompleted / all;
+				var rowEstimated = effortGroup.Sum(g => g.Estimated);
+				var rowEstimatedPercent = rowEstimated / all;
+				string rowPercentColor = rowCompletedPercent > rowEstimatedPercent ? "red" : rowCompletedPercent < rowEstimatedPercent ? "green" : "white";
+				var rowHeader = $"[bold]{effortGroup.Key}[/]\n{rowCompleted}h[gray]/[/]{all}h [gray]=[/] [{rowPercentColor}]{rowCompletedPercent:P0}[/] [gray](est {rowEstimatedPercent:P0})[/]";
 				table.AddRow([
-					new Markup($"[bold]{effortGroup.Key}[/]\n{effortGroup.Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Sum(g => g.Part) / all:P0}[/]"),
-					..areas.Select(area => new Markup($"{effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Part)}h[gray]/[/]{all}h [gray]=[/] [magenta]{effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Part) / all:P0}[/]"))
+					new Markup(rowHeader),
+					..areas.Select(area => 
+					{
+						var completed = effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Completed);
+						var completedPercent = completed / all;
+						var estimated = effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Estimated);
+						var estimatedPercent = estimated / all;
+						string percentColor = completedPercent > estimatedPercent ? "red" : completedPercent < estimatedPercent ? "green" : "white";
+						var cell = $"{completed}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray](est {estimatedPercent:P0})[/]";
+						return new Markup(cell);
+					})
 				]);
 			}
 			AnsiConsole.Write(table);
@@ -164,7 +183,9 @@ namespace popilot.cli.Verbs
 
 				foreach (var area in areas)
 				{
-					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, past ? completedWork(area) : remainingWork(area)));
+					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, 
+						Estimated: originalEstimate(area), 
+						Completed: past ? completedWork(area) : originalEstimate(area)));
 				}
 
 				double rowCompPercent = completedWork() / allCompletedWork();
@@ -207,10 +228,10 @@ namespace popilot.cli.Verbs
 			}
 			AnsiConsole.Write(table);
 
-			return new EffortGroups(past ? allCompletedWork() : allRemainingWork(), effortGroups);
+			return new EffortGroups(past ? allCompletedWork() : allOriginalEstimate(), effortGroups);
 		}
 
 		record EffortGroups(double All, List<EffortGroup> Groups);
-		record EffortGroup(string Name, string Area, double Part);
+		record EffortGroup(string Name, string Area, double Estimated, double Completed);
 	}
 }
