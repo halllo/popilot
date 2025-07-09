@@ -149,8 +149,8 @@ namespace popilot.cli.Verbs
 			table.ShowRowSeparators();
 			table.BorderColor(Color.Grey);
 			table.AddColumn(past
-				? $"{allCompletedWork()}h"
-				: $"{allRemainingWork()}h");
+				? $"[gray]comp[/] {allCompletedWork()}h [gray](est {allOriginalEstimate()}h)[/]"
+				: $"[gray]rem[/] {allRemainingWork()}h[gray], est[/] {allOriginalEstimate()}h");
 
 			var areas = workItems
 				.GroupBy(workItems => workItems.AreaPath)
