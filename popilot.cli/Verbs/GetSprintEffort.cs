@@ -68,17 +68,17 @@ namespace popilot.cli.Verbs
 			var table = new Table();
 			table.ShowRowSeparators();
 			table.BorderColor(Color.Grey);
-			table.AddColumn($"");
 			var all = sprintEfforts.Select(s => s.EffortGroups).Sum(g => g.All);
-			double effortCompleted(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Completed);
-			double effortEstimated(string area) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => g.Area == area).Sum(g => g.Estimated);
+			double effortCompleted(string? area = null) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => area == null || g.Area == area).Sum(g => g.Completed);
+			double effortEstimated(string? area = null) => sprintEfforts.SelectMany(s => s.EffortGroups.Groups).Where(g => area == null || g.Area == area).Sum(g => g.Estimated);
 			var areas = sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(g => g.Area).ToList();
+			table.AddColumn($"[gray]comp[/] {effortCompleted()}h[gray], est [/]{effortEstimated()}h");
 			foreach (var area in areas)
 			{
 				var completedPercent = effortCompleted(area.Key) / all;
 				var estimatedPercent = effortEstimated(area.Key) / all;
 				string percentColor = completedPercent > estimatedPercent ? "red" : completedPercent < estimatedPercent ? "green" : "white";
-				table.AddColumn($"[bold]{area.Key}[/]\n{effortCompleted(area.Key)}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray](est {estimatedPercent:P0})[/]");
+				table.AddColumn($"[bold]{area.Key}[/]\n{effortCompleted(area.Key)}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray]({estimatedPercent:P0})[/]");
 			}
 			foreach (var effortGroup in sprintEfforts.SelectMany(s => s.EffortGroups.Groups).GroupBy(e => e.Name))
 			{
@@ -87,7 +87,7 @@ namespace popilot.cli.Verbs
 				var rowEstimated = effortGroup.Sum(g => g.Estimated);
 				var rowEstimatedPercent = rowEstimated / all;
 				string rowPercentColor = rowCompletedPercent > rowEstimatedPercent ? "red" : rowCompletedPercent < rowEstimatedPercent ? "green" : "white";
-				var rowHeader = $"[bold]{effortGroup.Key}[/]\n{rowCompleted}h[gray]/[/]{all}h [gray]=[/] [{rowPercentColor}]{rowCompletedPercent:P0}[/] [gray](est {rowEstimatedPercent:P0})[/]";
+				var rowHeader = $"[bold]{effortGroup.Key}[/]\n{rowCompleted}h[gray]/[/]{all}h [gray]=[/] [{rowPercentColor}]{rowCompletedPercent:P0}[/] [gray]({rowEstimatedPercent:P0})[/]";
 				table.AddRow([
 					new Markup(rowHeader),
 					..areas.Select(area => 
@@ -97,7 +97,7 @@ namespace popilot.cli.Verbs
 						var estimated = effortGroup.Where(g => g.Area == area.Key).Sum(g => g.Estimated);
 						var estimatedPercent = estimated / all;
 						string percentColor = completedPercent > estimatedPercent ? "red" : completedPercent < estimatedPercent ? "green" : "white";
-						var cell = $"{completed}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray](est {estimatedPercent:P0})[/]";
+						var cell = $"{completed}h[gray]/[/]{all}h [gray]=[/] [{percentColor}]{completedPercent:P0}[/] [gray]({estimatedPercent:P0})[/]";
 						return new Markup(cell);
 					})
 				]);
@@ -149,8 +149,8 @@ namespace popilot.cli.Verbs
 			table.ShowRowSeparators();
 			table.BorderColor(Color.Grey);
 			table.AddColumn(past
-				? $"[gray]comp[/] {allCompletedWork()}h [gray](est {allOriginalEstimate()}h)[/]"
-				: $"[gray]rem[/] {allRemainingWork()}h[gray], est[/] {allOriginalEstimate()}h");
+				? $"[gray]comp[/] {allCompletedWork()}h[gray], est[/] {allOriginalEstimate()}h)"
+				: $"[gray]comp[/] {allCompletedWork()}h[gray] + rem[/] {allRemainingWork()}h[gray], est[/] {allOriginalEstimate()}h");
 
 			var areas = workItems
 				.GroupBy(workItems => workItems.AreaPath)
@@ -165,12 +165,14 @@ namespace popilot.cli.Verbs
 
 			foreach (var area in areas)
 			{
-				double columnCompPercent = allCompletedWork(area) / allCompletedWork();
 				double columnOrgPercent = allOriginalEstimate(area) / allOriginalEstimate();
-				string columnPercentColor = columnCompPercent > columnOrgPercent ? "red" : columnCompPercent < columnOrgPercent ? "green" : "white";
+				double columnCompPercent = allCompletedWork(area) / allCompletedWork();
+				string columnCompPercentColor = columnCompPercent > columnOrgPercent ? "red" : columnCompPercent < columnOrgPercent ? "green" : "white";
+				double columnCompRemPercent = (allCompletedWork(area) + allRemainingWork(area)) / (allCompletedWork() + allRemainingWork());
+				string columnCompRemPercentColor = columnCompRemPercent > columnOrgPercent ? "red" : columnCompRemPercent < columnOrgPercent ? "green" : "white";
 				var columnHeaderMarkup = past
-					? $"[bold]{area}[/]\n[gray]comp[/] {allCompletedWork(area)}h[gray],[/] [{columnPercentColor}]{columnCompPercent:P0}[/] [gray](est {columnOrgPercent:P0})[/]"
-					: $"[bold]{area}[/]\n[gray]rem[/] {allRemainingWork(area)}h[gray], est[/] {allOriginalEstimate(area)}h[gray],[/] [magenta]{columnOrgPercent:P0}[/]";
+					? $"[bold]{area}[/]\n{allCompletedWork(area)}h[gray],[/] [{columnCompPercentColor}]{columnCompPercent:P0}[/] [gray]({columnOrgPercent:P0})[/]"
+					: $"[bold]{area}[/]\n{allCompletedWork(area)}h[gray] + [/]{allRemainingWork(area)}h[gray],[/] {allOriginalEstimate(area)}h[gray],[/] [{columnCompRemPercentColor}]{columnCompRemPercent:P0}[/] [gray]({columnOrgPercent:P0})[/]";
 				table.AddColumn(columnHeaderMarkup);
 			}
 
@@ -185,29 +187,40 @@ namespace popilot.cli.Verbs
 				{
 					effortGroups.Add(new EffortGroup(wig.Key ?? "<no group>", area, 
 						Estimated: originalEstimate(area), 
-						Completed: past ? completedWork(area) : originalEstimate(area)));
+						Completed: past ? completedWork(area) : completedWork(area) + remainingWork(area)));
 				}
 
-				double rowCompPercent = completedWork() / allCompletedWork();
 				double rowOrgPercent = originalEstimate() / allOriginalEstimate();
+				double rowCompPercent = completedWork() / allCompletedWork();
 				string rowPercentColor = rowCompPercent > rowOrgPercent ? "red" : rowCompPercent < rowOrgPercent ? "green" : "white";
+				double rowCompRemPercent = (completedWork() + remainingWork()) / (allCompletedWork() + allRemainingWork());
+				string rowCompPercentColor = rowCompRemPercent > rowOrgPercent ? "red" : rowCompRemPercent < rowOrgPercent ? "green" : "white";
 				var rowHeaderMarkup = past
-					? $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]comp[/] {completedWork()}h[gray],[/] [{rowPercentColor}]{rowCompPercent:P0}[/] [gray](est {rowOrgPercent:P0})[/]"
-					: $"[bold]{wig.Key ?? "<no group>"}[/]\n[gray]rem[/] {remainingWork()}h[gray], est[/] {originalEstimate()}h[gray],[/] [magenta]{rowOrgPercent:P0}[/]";
+					? $"[bold]{wig.Key ?? "<no group>"}[/]\n{completedWork()}h[gray],[/] [{rowPercentColor}]{rowCompPercent:P0}[/] [gray]({rowOrgPercent:P0})[/]"
+					: $"[bold]{wig.Key ?? "<no group>"}[/]\n{completedWork()}h[gray] + [/]{remainingWork()}h[gray],[/] {originalEstimate()}h[gray],[/] [{rowCompPercentColor}]{rowCompRemPercent:P0}[/] [gray]({rowOrgPercent:P0})[/]";
 
 				string cellMarkup(string area)
 				{
 					double comp = completedWork(area);
 					double compAll = allCompletedWork();
-					double rem = remainingWork(area);
 					double org = originalEstimate(area);
 					double orgAll = allOriginalEstimate();
-					double compPercent = comp / compAll;
 					double orgPercent = org / orgAll;
-					string percentColor = compPercent > orgPercent ? "red" : compPercent < orgPercent ? "green" : "white";
-					return past
-						? $"[gray]comp[/] {comp}h[gray],[/] [{percentColor}]{compPercent:P0}[/] [gray](est {orgPercent:P0})[/]"
-						: $"[gray]rem[/] {rem}h[gray], est[/] {org}h[gray],[/] [magenta]{orgPercent:P0}[/]";
+
+					if (past)
+					{
+						double compPercent = comp / compAll;
+						string compPercentColor = compPercent > orgPercent ? "red" : compPercent < orgPercent ? "green" : "white";
+						return $"{comp}h[gray],[/] [{compPercentColor}]{compPercent:P0}[/] [gray]({orgPercent:P0})[/]";
+					}
+					else
+					{
+						double rem = remainingWork(area);
+						double remAll = allRemainingWork();
+						double remCompPercent = (comp + rem) / (compAll + remAll);
+						string remCompPercentColor = remCompPercent > orgPercent ? "red" : remCompPercent < orgPercent ? "green" : "white";
+						return $"{comp}h[gray] + [/]{rem}h[gray],[/] {org}h[gray],[/] [{remCompPercentColor}]{remCompPercent:P0}[/] [gray]({orgPercent:P0})[/]";
+					}
 				}
 
 				table.AddRow([
@@ -228,7 +241,7 @@ namespace popilot.cli.Verbs
 			}
 			AnsiConsole.Write(table);
 
-			return new EffortGroups(past ? allCompletedWork() : allOriginalEstimate(), effortGroups);
+			return new EffortGroups(past ? allCompletedWork() : allCompletedWork() + allRemainingWork(), effortGroups);
 		}
 
 		record EffortGroups(double All, List<EffortGroup> Groups);
