@@ -119,8 +119,9 @@ namespace popilot.cli.Verbs
 			var groups = GoupByTags?.Split(",", StringSplitOptions.RemoveEmptyEntries);
 			var filters = TagFilter?.Split(",", StringSplitOptions.RemoveEmptyEntries) ?? [];
 			var workItemGroups = workItems
-				.OrderBy(wi => wi.StackRank)
+				.Where(wi => wi.State != "Removed")
 				.WhereIf(IgnoreUnparented, wi => wi.ParentId != null)
+				.OrderBy(wi => wi.StackRank)
 				.Select(wi => new
 				{
 					workitem = wi,
@@ -149,7 +150,7 @@ namespace popilot.cli.Verbs
 			table.ShowRowSeparators();
 			table.BorderColor(Color.Grey);
 			table.AddColumn(past
-				? $"[gray]comp[/] {allCompletedWork()}h[gray], est[/] {allOriginalEstimate()}h)"
+				? $"[gray]comp[/] {allCompletedWork()}h[gray], est[/] {allOriginalEstimate()}h"
 				: $"[gray]comp[/] {allCompletedWork()}h[gray] + rem[/] {allRemainingWork()}h[gray], est[/] {allOriginalEstimate()}h");
 
 			var areas = workItems
