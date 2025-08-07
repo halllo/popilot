@@ -807,6 +807,13 @@ namespace popilot
 			return workItems;
 		}
 
+		public async Task<WorkItem> GetWorkItem(int id, CancellationToken cancellationToken = default)
+		{
+			await this.Init();
+			var workItem = await workItemClient!.GetWorkItemAsync(id, expand: WorkItemExpand.Fields, cancellationToken: cancellationToken);
+			return workItem;
+		}
+
 		public async Task<IReadOnlyCollection<StateChange>> GetStateChanges(int id, CancellationToken cancellationToken = default)
 		{
 			await this.Init();

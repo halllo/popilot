@@ -56,6 +56,12 @@ Or it can analyze a new requirement. If it needs to clarify more details, it wil
 popilot.cli.exe agent "please analyze login with microsoft as a new requirement"
 ```
 
+Or it can go through your query and classify your work items.
+
+```bash
+popilot.cli.exe agent "Go through all work items in this query https://dev.azure.com/.../_queries/query-edit/DD37046C-2E2C-408F-A5F7-C2F30CD28A3A/ and decide for each if it is 'Technical' or 'Organisational' work and add the corresponding tag."
+```
+
 ⚠️ Not all popilot operations are available in agent mode yet.
 
 ⚠️ Agent mode requires Amazon Bedrock configuration in the `appsettings.json`.
@@ -63,4 +69,3 @@ popilot.cli.exe agent "please analyze login with microsoft as a new requirement"
 ## Contributions
 
 I really hope you find value in popilot. Please feel free to contribute improvements via PRs.
-

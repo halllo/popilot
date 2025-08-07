@@ -6,6 +6,7 @@ using Spectre.Console;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Text.Json;
 
 namespace popilot.cli.Verbs
 {
@@ -23,11 +24,11 @@ namespace popilot.cli.Verbs
 		[Option('t', longName: "team", Required = false)]
 		public string? Team { get; set; }
 
-		public async Task Do(AzureDevOps azureDevOps, ILogger<Agent> logger, [FromKeyedServices("bedrock")] IAgent agent)
+		public async Task<(bool success, string summary)> Do(AzureDevOps azureDevOps, ILogger<Agent> logger, [FromKeyedServices("bedrock")] IAgent agent)
 		{
 			if (Simulate) logger.LogWarning("Simulation mode.");
 			logger.LogInformation("Task: {Task}", Task);
-			await agent.Do(
+			var agentResult = await agent.Do(
 				task: Task,
 				tools:
 				[
@@ -103,12 +104,12 @@ namespace popilot.cli.Verbs
 						}),
 
 					Tool.From([Description("Add tag.")]
-						async ([Required]string workItemId, string tag) =>
+						async ([Required]int workItemId, string tag) =>
 						{
 							if (!Simulate)
 							{
 								var cancelToken = CancellationToken.None;
-								var workItem = (await azureDevOps.GetWorkItems([int.Parse(workItemId)], cancelToken)).Single();
+								var workItem = (await azureDevOps.GetWorkItems([workItemId], cancelToken)).Single();
 								if (workItem.Tags.Contains(tag))
 								{
 									await azureDevOps.AddTag(workItem.Id, tag, cancelToken);
@@ -121,7 +122,7 @@ namespace popilot.cli.Verbs
 							};
 						}),
 
-					Tool.From(toolName: "AnalyzeRequirement", logInputsAndOutputs: false, tool: [Description("Analyze the requirement.")]
+					Tool.From(toolName: "PlanImplementation", logInputsAndOutputs: false, tool: [Description("Make a plan to fulfill the requirement.")]
 						async ([Required]string requirement, Tool.Context outerCtx) =>
 						{
 							AnalyzedRequirementPlan? rememberedPlan = null;
@@ -155,7 +156,60 @@ namespace popilot.cli.Verbs
 								return "Could not analyze requirement.";
 							}
 						}),
+
+					Tool.From(
+						toolName: "ForEachWorkItem",
+						tool: [Description("Perform a task for each work item of the query.")] async (
+							[Required]Guid queryId,
+							[Description("Can be anything you, the agent, can do. All your tools can also be used in this task.")]string task) =>
+						{
+							var cancelToken = CancellationToken.None;
+							var workItems = await azureDevOps.GetQueryResultsFlat(queryId, Project, Team, cancelToken);
+							foreach (var workItem in workItems)
+							{
+								var subTask = $"Lets work on work item {workItem.Id} \"{workItem.Title}\".\n\n{task}";
+								var subAgent = new Agent { Project = Project, Team = Team, Simulate = Simulate, Task = subTask };
+								var subAgentResult = await subAgent.Do(azureDevOps, logger, agent);
+								if(!subAgentResult.success)
+								{
+									return $"I failed to perform task for work item {workItem.Id} \"{workItem.Title}\": {subAgentResult.summary}";
+								}
+							}
+
+							return $"I have successfully performed the task on the {workItems.Count} work items of the query. Consider the task complete for these work items.";
+						}),
+
+					Tool.From([Description("Get work item details.")]
+						async ([Required]int workItemId) =>
+						{
+							var cancelToken = CancellationToken.None;
+							var workItem = await azureDevOps.GetWorkItem(workItemId, cancelToken);
+							return workItem;
+						}),
+				],
+				events: AgentOutput.Events(true));
+
+			return await SummarizeResult(agent, agentResult);
+		}
+
+		private async Task<(bool, string)> SummarizeResult(IAgent agent, AgentResult agentResult)
+		{
+			bool? success = null;
+			string? summary = null;
+			await agent.Do(
+				task: $"Summarize the interaction and determine if it was successful.\n\n{JsonSerializer.Serialize(agentResult)}",
+				tools:
+				[
+					Tool.From([Description("Provide summary.")]
+						(bool overallSuccessful, string shortSummary, Tool.Context context) =>
+						{
+							success = overallSuccessful;
+							summary = shortSummary;
+							context.Cancelled = true;
+						}),
 				]);
+
+			return (success ?? false, summary ?? string.Empty);
 		}
 
 		class AnalyzedRequirementPlan

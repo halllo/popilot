@@ -24,8 +24,8 @@ using (var serviceScope = host.Services.CreateScope())
 	{
 		var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 
-		var actions = typeof(Program).Assembly.GetTypes().Where(t => t.GetCustomAttribute(typeof(VerbAttribute)) != null).OrderBy(t => t.Name).ToList();
-		var parserResult = Parser.Default.ParseArguments(args, actions.ToArray());
+		var actions = typeof(Program).Assembly.GetTypes().Where(t => t.GetCustomAttribute<VerbAttribute>() != null).OrderBy(t => t.Name).ToArray();
+		var parserResult = Parser.Default.ParseArguments(args, actions);
 		var parsed = parserResult as Parsed<object>;
 
 		if (parsed != null)
@@ -159,7 +159,11 @@ static IHostBuilder CreateHostBuilder()
 					region: Amazon.RegionEndpoint.GetBySystemName(config["AWSBedrockRegion"]!)));
 
 				services.AddKeyedSingleton<IAgent, BedrockAgent>("bedrock");
-				services.Configure<BedrockAgentOptions>(o => o.ModelId = "anthropic.claude-3-5-sonnet-20240620-v1:0");
+				services.Configure<BedrockAgentOptions>(o =>
+				{
+					o.ModelId = "anthropic.claude-3-5-sonnet-20240620-v1:0";
+					o.Streaming = true;
+				});
 			}
 		});
 }

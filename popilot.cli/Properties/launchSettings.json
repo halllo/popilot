@@ -3,8 +3,9 @@
 		"popilot": {
 			"commandName": "Project",
 			//"commandLineArgs": "get-sprints",
-			"commandLineArgs": "agent \"Create a new task for Manuel to 'Refine Backlog' in the next two sprints (after the current sprint) with 20% of his available capacity.\"",
+			//"commandLineArgs": "agent \"Create a new task for Manuel to 'Refine Backlog' in the next two sprints (after the current sprint) with 20% of his available capacity.\"",
 			//"commandLineArgs": "create-workitem --task --sprint \"Iteration 2\" --assignee \"Manuel\" --effort 5 \"Backlog Refinement\""
+			"commandLineArgs": "agent \"Go through all work items in this query https://dev.azure.com/mnsdc/AzureDevOpsExperiments/_queries/query-edit/a2871f4b-e5d2-42d7-8279-844a34830cc7/ and decide for each if it is 'Technical' or 'Organisational' work and add the corresponding tag.\" -s"
 		}
   }
 }
