@@ -11,8 +11,8 @@ namespace popilot.cli
 			return new Events
 			{
 				BeforeMessage = async (role, message) => AnsiConsole.Markup($"[gray]{role}:[/] "),
-				OnMessageDelta = async (role, message) => AnsiConsole.Markup(message),
-				AfterMessage = async (role, message) => AnsiConsole.MarkupLine(streaming ? string.Empty : $"[gray]{role}:[/] {message}"),
+				OnMessageDelta = async (role, message) => AnsiConsole.Markup(Markup.Escape(message)),
+				AfterMessage = async (role, message) => AnsiConsole.MarkupLine(streaming ? string.Empty : $"[gray]{role}:[/] {Markup.Escape(message)}"),
 				BeforeToolCall = async (role, tool, toolUse, context, parameters) =>
 				{
 					AnsiConsole.MarkupLine($"[gray]{role}:[/] [cyan]🛠️{tool.Name}({Markup.Escape(JsonSerializer.Serialize(parameters))})...[/]");
