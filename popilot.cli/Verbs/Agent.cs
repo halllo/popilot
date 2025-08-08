@@ -110,7 +110,7 @@ namespace popilot.cli.Verbs
 							{
 								var cancelToken = CancellationToken.None;
 								var workItem = (await azureDevOps.GetWorkItems([workItemId], cancelToken)).Single();
-								if (workItem.Tags.Contains(tag))
+								if (!workItem.Tags.Contains(tag))
 								{
 									await azureDevOps.AddTag(workItem.Id, tag, cancelToken);
 								}
@@ -165,7 +165,8 @@ namespace popilot.cli.Verbs
 						{
 							var cancelToken = CancellationToken.None;
 							var workItems = await azureDevOps.GetQueryResultsFlat(queryId, Project, Team, cancelToken);
-							foreach (var workItem in workItems)
+							logger.LogInformation("Found {Count} work items for query {QueryId}.", workItems.Count, queryId);
+                            foreach (var workItem in workItems)
 							{
 								var subTask = $"Lets work on work item {workItem.Id} \"{workItem.Title}\".\n\n{task}";
 								var subAgent = new Agent { Project = Project, Team = Team, Simulate = Simulate, Task = subTask };
