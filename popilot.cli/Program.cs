@@ -91,7 +91,6 @@ static IHostBuilder CreateHostBuilder()
 				o.DefaultProject = config["DefaultProject"];
 				o.DefaultTeam = config["DefaultTeam"];
 				o.NonRoadmapWorkParentTitle = config["NonRoadmapWorkParentTitle"];
-				o.DontLogAccount = config.GetValue<bool>("DontLogAccount");
 			});
 			services.AddScoped<AzureDevOps>();
 
