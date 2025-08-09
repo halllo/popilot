@@ -34,46 +34,59 @@ namespace popilot
 		public ReleaseHttpClient? releaseClient;
 		public GitHttpClient? gitClient;
 
-		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger, bool logAccount = true)
+		private static Lazy<MsalCacheHelper> msalCacheHelper = new(() =>
 		{
-			const string azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
+			var storageProperties = new StorageCreationPropertiesBuilder("msal.cache", ".").Build();
+			var cacheHelper = MsalCacheHelper.CreateAsync(storageProperties).Result;
+			return cacheHelper;
+		});
+		private static Dictionary<(string clientId, string? tenantId), IPublicClientApplication> authClientsPerClientId = [];
+		private static IPublicClientApplication GetAuthClientCached(string clientId, string? tenantId)
+		{
+			return authClientsPerClientId.GetOrAddValue((clientId, tenantId), () =>
+			{
+				var authClient = PublicClientApplicationBuilder.Create(clientId)
+					.WithTenantIdIfNotNullNorEmpty(tenantId)
+					.WithDefaultRedirectUri()
+					.Build();
 
-			var authClient = PublicClientApplicationBuilder.Create(clientId)
-				.WithTenantIdIfNotNullNorEmpty(tenantId)
-				.WithDefaultRedirectUri()
-				.Build();
+				msalCacheHelper.Value.RegisterCache(authClient.UserTokenCache);
+				return authClient;
+			});
+		}
+
+		private static async Task<AuthenticationResult> AcquireAccessToken(string clientId, string? tenantId, string? username, string? password, ILogger<AzureDevOps> logger)
+		{
+			var authClient = GetAuthClientCached(clientId, tenantId);
+			const string azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
 
 			if (username != null && password != null)
 			{
-				if (logAccount) logger.LogInformation("Login as {Username}", username);
+				logger.LogDebug("Login as {Username}", username);
 				var result = await authClient.AcquireTokenByUsernamePassword([azureDevOpsResource + "/.default"], username, password).ExecuteAsync();
 				return result;
 			}
 			else
 			{
-				var storageProperties = new StorageCreationPropertiesBuilder("msal.cache", ".").Build();
-				var cacheHelper = await MsalCacheHelper.CreateAsync(storageProperties);
-				cacheHelper.RegisterCache(authClient.UserTokenCache);
-
 				try
 				{
 					var accounts = await authClient.GetAccountsAsync();
-					if (logAccount) logger.LogInformation("Attempting silent login: {Accounts}", accounts);
+					logger.LogDebug("Attempting silent login: {Accounts}", accounts);
 					var result = await authClient.AcquireTokenSilent([azureDevOpsResource + "/.default"], accounts.FirstOrDefault()).ExecuteAsync();
 					return result;
 				}
 				catch (Exception)
 				{
-					if (logAccount) logger.LogInformation("Interactive login required");
+					logger.LogInformation("Interactive login required");
 					var result = await authClient.AcquireTokenInteractive([azureDevOpsResource + "/.default"]).ExecuteAsync();
 					return result;
 				}
 			}
 		}
 
-		private static VssConnection LoginWithAccessToken(Uri baseUrl, string accessToken)
+		private static VssConnection LoginWithAccessTokenAcquisition(Uri baseUrl, Func<string[], AuthenticationResult> accessTokenAcquisition)
 		{
-			var token = new VssAadToken("bearer", accessToken);
+			var token = new VssAadToken(accessTokenAcquisition);
 			var credentials = new VssAadCredential(token);
 			var connection = new VssConnection(baseUrl, credentials);
 			return connection;
@@ -107,18 +120,17 @@ namespace popilot
 			this.connection?.Dispose();
 		}
 
-		string? azureDevOpsAccessToken;
 		public async Task Init()
 		{
 			if (this.connection == null)
 			{
-				if (azureDevOpsAccessToken == null)
+				await Task.Yield();
+				this.SetConnection(LoginWithAccessTokenAcquisition(options.Value.BaseUrl, scopes =>
 				{
-					var authenticationResult = await AcquireAccessToken(this.options.Value.ClientId, this.options.Value.TenantId, this.options.Value.Username, this.options.Value.Password, this.logger, !this.options.Value.DontLogAccount);
-					azureDevOpsAccessToken = authenticationResult.AccessToken;
-				}
-
-				this.SetConnection(LoginWithAccessToken(options.Value.BaseUrl, azureDevOpsAccessToken));
+					var tokenAcquisitionTask = AcquireAccessToken(this.options.Value.ClientId, this.options.Value.TenantId, this.options.Value.Username, this.options.Value.Password, this.logger);
+					var result = tokenAcquisitionTask.Result; //no support for async token acquisition, so we block here
+					return result;
+				}));
 			}
 		}
 

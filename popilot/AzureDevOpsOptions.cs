@@ -10,6 +10,5 @@
 		public string? DefaultProject { get; set; }
 		public string? DefaultTeam { get; set; }
 		public string? NonRoadmapWorkParentTitle { get; set; }
-		public bool DontLogAccount { get; set; }
 	}
 }
