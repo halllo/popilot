@@ -24,6 +24,8 @@ namespace popilot.cli.Verbs
 		[Option('t', longName: "team", Required = false)]
 		public string? Team { get; set; }
 
+		private List<(int workItemId, string? reason)> FlaggedForHumanReview = [];
+
 		public async Task<(bool success, string summary)> Do(AzureDevOps azureDevOps, ILogger<Agent> logger, [FromKeyedServices("bedrock")] IAgent agent)
 		{
 			if (Simulate) logger.LogWarning("Simulation mode.");
@@ -122,6 +124,12 @@ namespace popilot.cli.Verbs
 							};
 						}),
 
+					Tool.From([Description("Flag for human review.")]
+						async ([Required]int workItemId, string? reason = null) =>
+						{
+							FlaggedForHumanReview.Add((workItemId, reason));
+						}),
+
 					Tool.From(toolName: "PlanImplementation", logInputsAndOutputs: false, tool: [Description("Make a plan to fulfill the requirement.")]
 						async ([Required]string requirement, Tool.Context outerCtx) =>
 						{
@@ -166,10 +174,10 @@ namespace popilot.cli.Verbs
 							var cancelToken = CancellationToken.None;
 							var workItems = await azureDevOps.GetQueryResultsFlat(queryId, Project, Team, cancelToken);
 							logger.LogInformation("Found {Count} work items for query {QueryId}.", workItems.Count, queryId);
-                            foreach (var workItem in workItems)
+							foreach (var workItem in workItems)
 							{
 								var subTask = $"Lets work on work item {workItem.Id} \"{workItem.Title}\".\n\n{task}";
-								var subAgent = new Agent { Project = Project, Team = Team, Simulate = Simulate, Task = subTask };
+								var subAgent = new Agent { Project = Project, Team = Team, Simulate = Simulate, FlaggedForHumanReview = FlaggedForHumanReview, Task = subTask };
 								var subAgentResult = await subAgent.Do(azureDevOps, logger, agent);
 								if(!subAgentResult.success)
 								{
@@ -189,6 +197,15 @@ namespace popilot.cli.Verbs
 						}),
 				],
 				events: AgentOutput.Events(true));
+
+			if (FlaggedForHumanReview.Any())
+			{
+				logger.LogInformation("There were {Count} work items flagged for human review.", FlaggedForHumanReview.Count);
+				foreach (var item in FlaggedForHumanReview)
+				{
+					AnsiConsole.MarkupLine($"[bold][red]Work item {item.workItemId} flagged for human review:[/] {Markup.Escape(item.reason ?? "No reason provided.")}[/]");
+				}
+			}
 
 			return await SummarizeResult(agent, agentResult);
 		}

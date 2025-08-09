@@ -38,24 +38,40 @@ namespace popilot.cli.Verbs
 		[Value(0, MetaName = "query ID (guid)", Required = true)]
 		public Guid QueryId { get; set; }
 
+		[Option(longName: "tree", Required = false)]
+		public bool Tree { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetQuery> logger)
 		{
-			var (query, tree) = await azureDevOps.GetQueryResults(QueryId);
-			if (tree != null)
+			if (Tree)
 			{
-				logger.LogInformation("{Query} with {Count} work items loaded", query.Name, tree.VertexCount);
-				foreach (var root in tree.Roots())
+				var (query, tree) = await azureDevOps.GetQueryResults(QueryId);
+				if (tree != null)
 				{
-					Display(tree, root, displayName: w => w switch
+					logger.LogInformation("{Query} with {Count} work items loaded", query.Name, tree.VertexCount);
+					foreach (var root in tree.Roots())
 					{
-						null => new Markup($"??? {query.Name}"),
-						_ => Display2(w)
-					});
+						Display(tree, root, displayName: w => w switch
+						{
+							null => new Markup($"??? {query.Name}"),
+							_ => Display2(w)
+						});
+					}
+				}
+				else
+				{
+					logger.LogError("No work item relations found.");
 				}
 			}
 			else
 			{
-				logger.LogError("No work item relations found.");
+				var workItems = await azureDevOps.GetQueryResultsFlat(QueryId);
+				logger.LogInformation("Found {Count} work items in {Query}", workItems.Count, QueryId);
+				foreach (var workItem in workItems)
+				{
+					AnsiConsole.Write(Display2(workItem));
+					AnsiConsole.WriteLine();
+				}
 			}
 		}
 	}
