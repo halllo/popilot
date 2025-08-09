@@ -457,7 +457,21 @@ namespace popilot
 			var parentIds = directWorkItems.Where(i => i.ParentId.HasValue).Select(i => i.ParentId!.Value).ToList();
 			if (parentIds.Any())
 			{
-				var parentWorkItems = await parentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
+				List<WorkItem> parentWorkItems;
+				try
+				{
+					parentWorkItems = await parentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
+				} 
+				catch (VssServiceException e) when (e.Message.StartsWith("TF401232")) //Work item does not exist, or you do not have permissions to read it.
+				{
+					var problematicWorkItemMatch = Regex.Match(e.Message, "TF401232: Work item (?<workItemId>\\d*?) does not exist, or you do not have permissions to read it.");
+					var problematicWorkItemId = int.Parse(problematicWorkItemMatch.Groups["workItemId"].Value);
+					logger.LogWarning("WorkItem parent {Id} does not exist or we dont have permissions to it. We ignore it as a parent and continue.", problematicWorkItemId);
+					parentIds.Remove(problematicWorkItemId);//remove the problematic work item from the list of parent IDs
+
+					//and try again...
+					parentWorkItems = await parentIds.Distinct().Paged(200, page => workItemClient!.GetWorkItemsAsync(page, expand: WorkItemExpand.Relations, cancellationToken: cancellationToken));
+				}
 				var parentDtos = Map(parentWorkItems);
 				mappedWorkItems.AddRange(parentDtos);
 
