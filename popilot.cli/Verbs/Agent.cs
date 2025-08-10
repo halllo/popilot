@@ -166,7 +166,7 @@ namespace popilot.cli.Verbs
 						}),
 
 					Tool.From(
-						toolName: "ForEachWorkItem",
+						toolName: "ForEachWorkItemInQuery",
 						tool: [Description("Perform a task for each work item of the query.")] async (
 							[Required]Guid queryId,
 							[Description("Can be anything you, the agent, can do. All your tools can also be used in this task.")]string task) =>
@@ -186,6 +186,29 @@ namespace popilot.cli.Verbs
 							}
 
 							return $"I have successfully performed the task on the {workItems.Count} work items of the query. Consider the task complete for these work items.";
+						}),
+
+					Tool.From(
+						toolName: "ForEachWorkItemInList",
+						tool: [Description("Perform a task for each work item of the list.")] async (
+							[Required]int[] workItemIds,
+							[Description("Can be anything you, the agent, can do. All your tools can also be used in this task.")]string task) =>
+						{
+							var cancelToken = CancellationToken.None;
+							var workItems = await azureDevOps.GetWorkItems(workItemIds, cancelToken);
+							logger.LogInformation("Found {Count} work items.", workItems.Count);
+							foreach (var workItem in workItems)
+							{
+								var subTask = $"Lets work on work item {workItem.Id} \"{workItem.Title}\".\n\n{task}";
+								var subAgent = new Agent { Project = Project, Team = Team, Simulate = Simulate, FlaggedForHumanReview = FlaggedForHumanReview, Task = subTask };
+								var subAgentResult = await subAgent.Do(azureDevOps, logger, agent);
+								if(!subAgentResult.success)
+								{
+									return $"I failed to perform task for work item {workItem.Id} \"{workItem.Title}\": {subAgentResult.summary}";
+								}
+							}
+
+							return $"I have successfully performed the task on the {workItems.Count} work items of the list. Consider the task complete for these work items.";
 						}),
 
 					Tool.From([Description("Get work item details.")]
