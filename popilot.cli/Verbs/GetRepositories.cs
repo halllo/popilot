@@ -15,6 +15,8 @@ namespace popilot.cli.Verbs
 		[Value(0, MetaName = "filter", Required = false)]
 		public string? Filter { get; set; }
 
+		public string? GeneratedDocumentName { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetRepositories> logger)
 		{
 			StringBuilder stringBuilder = new();
@@ -58,7 +60,7 @@ namespace popilot.cli.Verbs
 
 			if (GenerateDocument)
 			{
-				string fileName = $"repositories_{Filter}_{DateTime.Now:yyyyMMdd-HHmmss}.md";
+				string fileName = GeneratedDocumentName ?? $"repositories_{Filter}_{DateTime.Now:yyyyMMdd-HHmmss}.md";
 				File.WriteAllText(fileName, stringBuilder.ToString());
 				Process.Start(new ProcessStartInfo(new FileInfo(fileName).FullName) { UseShellExecute = true });
 			}
