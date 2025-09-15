@@ -361,7 +361,8 @@ namespace popilot
 							Dictionary<int, Microsoft.TeamFoundation.Work.WebApi.TeamSettingsIteration?> workItemIdToIteration = [];
 							foreach (var wi in workItems)
 							{
-								var path = wi.IterationPath.StartsWith(wi.TeamProject) ? wi.IterationPath.Substring(wi.TeamProject.Length + 1) : wi.IterationPath;
+								var path = wi.IterationPath == wi.TeamProject ? "" :
+									wi.IterationPath.StartsWith(wi.TeamProject) ? wi.IterationPath.Substring(wi.TeamProject.Length + 1) : wi.IterationPath;
 								var iterations = await azureDevOps.GetAllIterations(wi.TeamProject, null, path);
 								var iteration = iterations.FirstOrDefault(i => i.Path == wi.IterationPath);
 								workItemIdToIteration.Add(wi.Id, iteration);
