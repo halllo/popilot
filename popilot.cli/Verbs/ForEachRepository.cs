@@ -20,7 +20,7 @@ namespace popilot.cli.Verbs
 		[Option(longName: "clone-in", Required = false, HelpText = "Directory to clone repositories into.")]
 		public string? CloneIn { get; set; }
 
-		[Option(longName: "do", Required = false, HelpText = "Script to execute per repository.")]
+		[Option(longName: "execute", Required = false, HelpText = "Script to execute per repository.")]
 		public string? ScriptToExecute { get; set; }
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<ForEachRepository> logger, ILogger<GetRepositories> getRepoLogger)
@@ -56,14 +56,13 @@ namespace popilot.cli.Verbs
 				@"RemoteUrl: <(?<remoteUrl>https://.*?)>" +
 				@"$";
 
-			var repoObjects = Regex.Matches(report, splitPattern);
-
+			var repoObjects = Regex.Matches(report, splitPattern).Select(m => m.Value.Trim()).ToList();
 			var nextRepoObjects = AnsiConsole.Progress()
 				.Start(ctx =>
 				{
 					var task = ctx.AddTask("Parsing report", maxValue: repoObjects.Count);
 					return repoObjects
-						.Select(match => Regex.Match(match.Value.Trim(), objectPattern))//not very efficient but good enough for now.
+						.Select(repo => Regex.Match(repo, objectPattern))//not very efficient but good enough for now.
 						.Do(m => { task.Value++; ctx.Refresh(); })
 						.Where(m => m.Success)
 						.Select(m => new
@@ -100,24 +99,129 @@ namespace popilot.cli.Verbs
 				}
 				else
 				{
-					logger.LogInformation("Processing repository {RepoName} ({RepoId})...", repo.Name, repo.RepositoryId);
 					if (File.Exists(ScriptToExecute))
 					{
 						if (Directory.Exists(CloneIn))
 						{
-							//todo: clone repository, checkout default branch, etc.
+							var targetDirectory = Path.Combine(CloneIn!, repo.Name);
 
-							//todo: actual processing
-							
-							//todo: remove repository clone, etc.
+							{//clone repo
+								if (Directory.Exists(targetDirectory))
+								{
+									logger.LogInformation("Target directory {TargetDirectory} already exists. Skipping clone.", targetDirectory);
+								}
+								else
+								{
+									logger.LogInformation("Cloning {RepoUrl} into {TargetDirectory}...", repo.RemoteUrl, targetDirectory);
+									var gitClone = new System.Diagnostics.Process
+									{
+										StartInfo = new System.Diagnostics.ProcessStartInfo
+										{
+											FileName = "git",
+											Arguments = $"clone {repo.RemoteUrl} \"{targetDirectory}\"",
+											RedirectStandardOutput = true,
+											RedirectStandardError = true,
+											UseShellExecute = false,
+											CreateNoWindow = true
+										}
+									};
 
-							updateReport($"Processed at {DateTime.UtcNow:o}");
+									gitClone.Start();
+									string output = await gitClone.StandardOutput.ReadToEndAsync();
+									string error = await gitClone.StandardError.ReadToEndAsync();
+									gitClone.WaitForExit();
+									var exitCode = gitClone.ExitCode;
+									gitClone.Dispose();
+
+									if (exitCode != 0)
+									{
+										logger.LogError("Git clone failed with exit code {ExitCode}. Error: {Error}", exitCode, error);
+										break;
+									}
+
+									logger.LogInformation("Cloning finished.");
+								}
+							}
+
+							{//process repo
+								logger.LogInformation("Processing {TargetDirectory}...", targetDirectory);
+								var processing = new System.Diagnostics.Process
+								{
+									StartInfo = new System.Diagnostics.ProcessStartInfo
+									{
+										FileName = "powershell",
+										Arguments = ScriptToExecute,
+										WorkingDirectory = targetDirectory,
+										RedirectStandardOutput = true,
+										RedirectStandardError = true,
+										UseShellExecute = false,
+										CreateNoWindow = true
+									}
+								};
+
+								processing.Start();
+								string output = await processing.StandardOutput.ReadToEndAsync();
+								string error = await processing.StandardError.ReadToEndAsync();
+								processing.WaitForExit();
+								var exitCode = processing.ExitCode;
+								processing.Dispose();
+								if (exitCode != 0)
+								{
+									logger.LogError("Processing failed with exit code {ExitCode}. Error: {Error}", exitCode, error);
+									break;
+								}
+								else
+								{
+									updateReport($"Processed at {DateTime.UtcNow:o}\r\n{output.Replace("\r\n", " ").Replace("\n", " ")}");
+									logger.LogInformation("Processing finished: {Output}", output);
+								}
+							}
+
+							{//cleanup
+								if (Directory.Exists(targetDirectory))
+								{
+									logger.LogInformation("Removing {TargetDirectory}...", targetDirectory);
+									try
+									{
+										Directory.Delete(targetDirectory, recursive: true);
+										logger.LogInformation("Removing finished.");
+									}
+									catch (Exception ex1)
+									{
+										logger.LogDebug("Removing cloned repo failed but we will try again: {Error}", ex1.Message);
+										try
+										{
+											var files = Directory.GetFiles(targetDirectory, "*", SearchOption.AllDirectories);
+											foreach (var file in files)
+											{
+												File.SetAttributes(file, FileAttributes.Normal);
+												File.Delete(file);
+											}
+
+											Directory.Delete(targetDirectory, recursive: true);
+											logger.LogInformation("Removing finished.");
+										}
+										catch (Exception ex2)
+										{
+											logger.LogError("Removing cloned repo failed: {Error}", ex2.Message);
+										}
+									}
+								}
+								else
+								{
+									logger.LogInformation("Target directory {TargetDirectory} does not exist. Skipping removal.", targetDirectory);
+								}
+							}
 						}
 						else
 						{
 							logger.LogError("Clone directory {CloneIn} does not exist.", CloneIn);
 							break;
 						}
+					}
+					else
+					{
+						logger.LogInformation("Ignoring {RepoName} ({RepoId})", repo.Name, repo.RepositoryId);
 					}
 				}
 			}

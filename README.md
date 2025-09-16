@@ -38,6 +38,12 @@ You can view sprint effort grouped by tags. Tasks also inherit their tags from t
 popilot.cli.exe get-sprint-effort "Sprints\1" --group-by-tags "Support,Analysis,Dev"
 ```
 
+You can execute a script for each repository in all projects you have access to like this:
+
+```bash
+popilot.cli.exe foreach-repository --report "all-repositories1.md" --skip "ignore-repos.txt" --clone-in "D:\tmp\c" --execute "gitlog.ps1"
+```
+
 Other than that, there are many more commands available.
 
 ## Agent Mode
