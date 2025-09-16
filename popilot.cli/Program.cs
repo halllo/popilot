@@ -72,6 +72,9 @@ static IHostBuilder CreateHostBuilder()
 	return Host.CreateDefaultBuilder()
 		.ConfigureAppConfiguration(cfg =>
 		{
+			var defaultAppsettingsSource = cfg.Sources.OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>().First(x => x.Path == "appsettings.json");
+			defaultAppsettingsSource.Optional = false;
+
 			cfg.AddJsonFile("appsettings.local.json", optional: true);
 		})
 		.UseSerilog((ctx, cfg) =>
