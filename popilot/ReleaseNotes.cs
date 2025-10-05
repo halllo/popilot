@@ -33,6 +33,7 @@ namespace popilot
 			Regex? iterationPathFilter = null,
 			string? areaPath = null,
 			Regex? areaPathFilter = null,
+			bool filterByReleaseNotesField = false,
 			int? take = null,
 			CancellationToken cancellationToken = default)
 		{
@@ -53,7 +54,10 @@ namespace popilot
 				.Select(g => new WorkItemsGroup
 				(
 					GroupName: $"{g.Key:dd.MM.yyyy}",
-					WorkItems: g.Where(w => w.Tags.Contains("_ReleaseNotes") || w.Tags.Contains("ReleaseNotes")).ToList()
+					WorkItems: g.Where(w => filterByReleaseNotesField 
+						? !string.IsNullOrWhiteSpace(w.ReleaseNotes)
+						: (new[] { "_ReleaseNotes", "ReleaseNotes" }).Any(t => w.Tags.Contains(t))
+					).ToList()
 				))
 				.Where(g => g.WorkItems.Any())
 				.ToList();

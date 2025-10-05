@@ -50,6 +50,9 @@ namespace popilot.cli.Verbs
 		[Option(longName: "area-path-filter", Required = false)]
 		public Regex? AreaPathFilter { get; set; }
 
+		[Option(longName: "filter-by-releasenotes-field", Required = false, HelpText = "Dont filter by ReleaseNotes tag but by release notes presence.")]
+		public bool FilterByReleaseNotesField { get; set; }
+
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetReleaseNotes> logger)
 		{
 			var releaseNotesReader = new ReleaseNotes(azureDevOps);
@@ -72,7 +75,15 @@ namespace popilot.cli.Verbs
 			}
 			else
 			{
-				var releaseNotes = await releaseNotesReader.OfRecentClosings(Project, Team, IterationPath, IterationPathFilter, AreaPath, AreaPathFilter, take: TakeSprints);
+				var releaseNotes = await releaseNotesReader.OfRecentClosings(
+					project: Project, 
+					team: Team, 
+					iterationPath: IterationPath, 
+					iterationPathFilter: IterationPathFilter, 
+					areaPath: AreaPath, 
+					areaPathFilter: AreaPathFilter,
+					filterByReleaseNotesField: FilterByReleaseNotesField,
+					take: TakeSprints);
 
 				if (string.Equals(Output, "html", StringComparison.InvariantCultureIgnoreCase))
 				{
