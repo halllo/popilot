@@ -12,6 +12,9 @@ namespace popilot.cli.Verbs
 			var myDrive = await graphClient.Me.Drive.GetAsync();
 			logger.LogInformation("My Drive: {Drive} ({ID})", myDrive?.Name, myDrive?.Id);
 
+			var me = await graphClient.Me.GetAsync((config) => { config.QueryParameters.Select = ["displayName", "mail", "userPrincipalName"]; });
+			Console.WriteLine($"Hello, {me?.DisplayName}!");
+
 			//todo read excel file
 			throw new NotImplementedException("todo");
 		}
