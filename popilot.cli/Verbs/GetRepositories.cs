@@ -9,12 +9,13 @@ namespace popilot.cli.Verbs
 	[Verb("get-repositories")]
 	class GetRepositories
 	{
-		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
-		public bool GenerateDocument { get; set; }
-
 		[Value(0, MetaName = "filter", Required = false)]
 		public string? Filter { get; set; }
 
+		[Option('d', longName: "document", Required = false, HelpText = "Generates a document.")]
+		public bool GenerateDocument { get; set; }
+
+		[Option('n', longName: "name", Required = false, HelpText = "Generated document name.")]
 		public string? GeneratedDocumentName { get; set; }
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<GetRepositories> logger)

@@ -1,7 +1,7 @@
-﻿using System.Text.RegularExpressions;
-using CommandLine;
+﻿using CommandLine;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
+using System.Text.RegularExpressions;
 
 namespace popilot.cli.Verbs
 {
@@ -22,6 +22,9 @@ namespace popilot.cli.Verbs
 
 		[Option(longName: "execute", Required = false, HelpText = "Script to execute per repository.")]
 		public string? ScriptToExecute { get; set; }
+
+		[Option(longName: "skip-cleanup", Required = false, HelpText = "Whether to skip removing the cloned repositories after executing the script.")]
+		public bool SkipCleanUp { get; set; }
 
 		public async Task Do(AzureDevOps azureDevOps, ILogger<ForEachRepository> logger, ILogger<GetRepositories> getRepoLogger)
 		{
@@ -109,6 +112,8 @@ namespace popilot.cli.Verbs
 								if (Directory.Exists(targetDirectory))
 								{
 									logger.LogInformation("Target directory {TargetDirectory} already exists. Skipping clone.", targetDirectory);
+
+									//todo - consider pulling the latest changes instead of skipping if the directory already exists. For now, we will just skip to avoid any unintended consequences.
 								}
 								else
 								{
@@ -145,6 +150,12 @@ namespace popilot.cli.Verbs
 
 							{//process repo
 								logger.LogInformation("Processing {TargetDirectory}...", targetDirectory);
+								if (File.Exists(ScriptToExecute))
+								{
+									var targetScript = Path.Combine(targetDirectory, Path.GetFileName(ScriptToExecute));
+									logger.LogInformation("Copying script {ScriptToExecute} to {TargetDirectory}...", ScriptToExecute, targetDirectory);
+									File.Copy(ScriptToExecute, targetScript, overwrite: true);
+								}
 								var processing = new System.Diagnostics.Process
 								{
 									StartInfo = new System.Diagnostics.ProcessStartInfo
@@ -178,38 +189,45 @@ namespace popilot.cli.Verbs
 							}
 
 							{//cleanup
-								if (Directory.Exists(targetDirectory))
+								if (!SkipCleanUp)
 								{
-									logger.LogInformation("Removing {TargetDirectory}...", targetDirectory);
-									try
+									if (Directory.Exists(targetDirectory))
 									{
-										Directory.Delete(targetDirectory, recursive: true);
-										logger.LogInformation("Removing finished.");
-									}
-									catch (Exception ex1)
-									{
-										logger.LogDebug("Removing cloned repo failed but we will try again: {Error}", ex1.Message);
+										logger.LogInformation("Removing {TargetDirectory}...", targetDirectory);
 										try
 										{
-											var files = Directory.GetFiles(targetDirectory, "*", SearchOption.AllDirectories);
-											foreach (var file in files)
-											{
-												File.SetAttributes(file, FileAttributes.Normal);
-												File.Delete(file);
-											}
-
 											Directory.Delete(targetDirectory, recursive: true);
 											logger.LogInformation("Removing finished.");
 										}
-										catch (Exception ex2)
+										catch (Exception ex1)
 										{
-											logger.LogError("Removing cloned repo failed: {Error}", ex2.Message);
+											logger.LogDebug("Removing cloned repo failed but we will try again: {Error}", ex1.Message);
+											try
+											{
+												var files = Directory.GetFiles(targetDirectory, "*", SearchOption.AllDirectories);
+												foreach (var file in files)
+												{
+													File.SetAttributes(file, FileAttributes.Normal);
+													File.Delete(file);
+												}
+
+												Directory.Delete(targetDirectory, recursive: true);
+												logger.LogInformation("Removing finished.");
+											}
+											catch (Exception ex2)
+											{
+												logger.LogError("Removing cloned repo failed: {Error}", ex2.Message);
+											}
 										}
+									}
+									else
+									{
+										logger.LogInformation("Target directory {TargetDirectory} does not exist. Skipping removal.", targetDirectory);
 									}
 								}
 								else
 								{
-									logger.LogInformation("Target directory {TargetDirectory} does not exist. Skipping removal.", targetDirectory);
+									logger.LogInformation("Skipping cleanup of {TargetDirectory}.", targetDirectory);
 								}
 							}
 						}
